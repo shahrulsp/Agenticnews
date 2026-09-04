@@ -3,45 +3,45 @@ import sanitizeHtml from 'sanitize-html';
 import type { Article, ArticleDraftInput } from '$lib/types';
 
 const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
-	allowedTags: [
-		'h2',
-		'h3',
-		'p',
-		'strong',
-		'em',
-		'ul',
-		'ol',
-		'li',
-		'blockquote',
-		'br',
-		'a',
-		'code',
-		'pre'
-	],
-	allowedAttributes: {
-		a: ['href', 'target', 'rel']
-	},
-	allowedSchemes: ['http', 'https', 'mailto'],
-	transformTags: {
-		a: (tagName, attribs) => {
-			const href = attribs.href ?? '';
-			const target = attribs.target === '_blank' ? '_blank' : undefined;
+        allowedTags: [
+                'h2',
+                'h3',
+                'p',
+                'strong',
+                'em',
+                'ul',
+                'ol',
+                'li',
+                'blockquote',
+                'br',
+                'a',
+                'code',
+                'pre'
+        ],
+        allowedAttributes: {
+                a: ['href', 'target', 'rel']
+        },
+        allowedSchemes: ['http', 'https', 'mailto'],
+        transformTags: {
+                a: (tagName, attribs) => {
+                        const href = attribs.href ?? '';
+                        const target = attribs.target === '_blank' ? '_blank' : undefined;
 
-			return {
-				tagName,
-				attribs: {
-					href,
-					...(target ? { target } : {}),
-					rel: 'noopener noreferrer'
-				}
-			};
-		}
-	}
+                        return {
+                                tagName,
+                                attribs: {
+                                        href,
+                                        ...(target ? { target } : {}),
+                                        rel: 'noopener noreferrer'
+                                }
+                        };
+                }
+        }
 };
 
 const PLAIN_TEXT_OPTIONS: sanitizeHtml.IOptions = {
-	allowedTags: [],
-	allowedAttributes: {}
+        allowedTags: [],
+        allowedAttributes: {}
 };
 
 export function sanitizePlainText(value: string | null | undefined): string | null {
@@ -49,7 +49,7 @@ export function sanitizePlainText(value: string | null | undefined): string | nu
 		return null;
 	}
 
-	const sanitized = sanitizeHtml(value, PLAIN_TEXT_OPTIONS).replace(/\s+/g, ' ').trim();
+        const sanitized = sanitizeHtml(value, PLAIN_TEXT_OPTIONS).replace(/\s+/g, ' ').trim();
 
 	return sanitized.length > 0 ? sanitized : null;
 }
@@ -59,7 +59,7 @@ export function sanitizeRichText(value: string | null | undefined): string | nul
 		return null;
 	}
 
-	return sanitizeHtml(value, SANITIZE_OPTIONS);
+        return sanitizeHtml(value, SANITIZE_OPTIONS);
 }
 
 export function sanitizeArticleDraftInput(input: ArticleDraftInput): ArticleDraftInput {
