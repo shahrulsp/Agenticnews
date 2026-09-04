@@ -4,19 +4,13 @@ import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ url }) => {
 	const review = url.searchParams.get('review');
-	const workflow = url.searchParams.get('workflow');
-	const workflowMessage = url.searchParams.get('workflowMessage');
-	const workflowStatus =
-		workflow === 'sent' || workflow === 'skipped' || workflow === 'failed' ? workflow : null;
 
 	if (!hasDatabaseConfig()) {
 		return {
 			articles: [],
 			databaseReady: false,
 			databaseError: null,
-			reviewStatus: null,
-			workflowStatus,
-			workflowMessage
+                        reviewStatus: null
 		};
 	}
 
@@ -27,18 +21,14 @@ export const load: PageServerLoad = async ({ url }) => {
 			articles,
 			databaseReady: true,
 			databaseError: null,
-			reviewStatus: review === 'approved' || review === 'rejected' ? review : null,
-			workflowStatus,
-			workflowMessage
+                        reviewStatus: review === 'approved' || review === 'rejected' ? review : null
 		};
 	} catch (error) {
 		return {
 			articles: [],
 			databaseReady: true,
 			databaseError: error instanceof Error ? error.message : 'Unable to load pending articles.',
-			reviewStatus: null,
-			workflowStatus,
-			workflowMessage
+                        reviewStatus: null
 		};
 	}
 };

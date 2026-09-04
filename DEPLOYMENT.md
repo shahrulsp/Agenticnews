@@ -25,7 +25,6 @@ Optional but recommended:
 
 - `INTERNAL_INGEST_TOKEN`
 - `MISTRAL_API_KEY`
-- `MISTRAL_SIGNAL_NAME`
 - `PUBLIC_DEFAULT_LOCALE`
 
 ### Worker
@@ -40,6 +39,12 @@ Required worker environment variables:
 
 - `MISTRAL_API_KEY`
 - `DEPLOYMENT_NAME=agenticnews-review`
+- `AGENTICNEWS_BASE_URL`
+- `INTERNAL_INGEST_TOKEN`
+
+Optional worker environment variables:
+
+- `MISTRAL_TEXT_MODEL` (defaults to `mistral-small-latest`)
 
 ## Pre-deploy checklist
 
@@ -48,7 +53,9 @@ Required worker environment variables:
 3. Confirm `ADMIN_PASSWORD_HASH` keeps escaped dollar signs in env files.
 4. Confirm `INTERNAL_INGEST_TOKEN` is a real random bearer token.
 5. Confirm the Railway worker has the same `MISTRAL_API_KEY` expected by the app.
-6. Confirm the worker logs show `agenticnews-review` registered successfully.
+6. Confirm the Railway worker has the same `INTERNAL_INGEST_TOKEN` configured in the app.
+7. Confirm `AGENTICNEWS_BASE_URL` points at the deployed web app origin.
+8. Confirm the worker logs show `agenticnews-review` registered successfully.
 
 ## Release checklist
 
@@ -57,12 +64,14 @@ Required worker environment variables:
    - connection to the Mistral workflow scheduler
    - registration of `agenticnews-review`
    - worker startup on task queue `agenticnews-review`
+   - successful POST calls to `/api/internal/drafts`
 3. Deploy the SvelteKit app.
 4. Open `/admin/login` and confirm admin sign-in still works.
-5. Trigger a small draft ingest using the internal endpoint.
-6. Approve or reject the draft from `/admin`.
-7. Confirm the app redirects with a `workflow=sent` banner.
-8. Confirm the workflow execution moves to `COMPLETED`.
+5. Trigger a workflow execution or wait for the 7:00 AM MYT schedule.
+6. Confirm a new pending draft appears in `/admin`.
+7. Approve or reject the draft from `/admin`.
+8. Confirm the app redirects with the expected editorial review banner.
+9. Confirm the workflow execution completes after draft ingest.
 
 ## Smoke test commands
 
@@ -72,32 +81,26 @@ From the app project:
 npm run list:workflow-runs -- --limit 10
 ```
 
-```sh
-npm run smoke:workflow -- \
-  --execution-id <real-execution-id> \
-  --slug <article-slug> \
-  --status approved
-```
-
 ## Upstream contract
 
 The ingest side should send:
 
 - `workflow_execution_id`
 
-The app stores that value in `articles.agent_run_id`, and the admin review callback uses it to signal Mistral via:
+The app stores that value in `articles.agent_run_id` for traceability between a draft and the workflow execution that created it.
 
-- `POST /v1/workflows/executions/{execution_id}/signals`
-
-The execute endpoint for the worker expects this body shape:
+The execute endpoint for the worker accepts this body shape:
 
 ```json
 {
 	"input": {
-		"slug": "article-slug"
+                "slug": "agenticnews-morning-run",
+                "topic": "AI and technology trends shaping Asia today"
 	}
 }
 ```
+
+The worker turns that base slug into a daily slug such as `agenticnews-morning-run-2026-09-04` before posting the draft into Agenticnews.
 
 ## Cleanup
 
@@ -121,7 +124,7 @@ Review the SQL first and keep it for local or explicit manual cleanup only.
 
 1. Redeploy the previous known-good Railway release.
 2. Confirm worker logs show successful registration.
-3. Start one fresh workflow execution and send a test signal.
+3. Start one fresh workflow execution and confirm a pending draft lands in `/admin`.
 
 ### Database rollback
 
@@ -138,6 +141,6 @@ Do not run the full reset script against production data.
 ## Known operational lessons
 
 - Do not shell-source `.env` directly when `NEON_DATABASE_URL` contains `&`; extract the exact line instead.
-- Do not use placeholder values for `MISTRAL_API_KEY` or execution IDs when testing workflow callbacks.
+- Do not use placeholder values for `MISTRAL_API_KEY` or execution IDs when testing workflow runs.
 - The Mistral worker runtime requires `mistralai-workflows` and Python 3.12+.
-- The admin flow is non-blocking by design: article review should still succeed even if workflow signaling fails.
+- Editorial review now happens entirely inside Agenticnews after the workflow delivers the draft.

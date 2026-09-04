@@ -27,7 +27,7 @@
 	<div class="header-copy">
                 <p class="eyebrow">Editorial desk</p>
                 <h2>Pending stories</h2>
-                <p>Review incoming drafts, check their workflow signals, and decide what goes live next.</p>
+                <p>Review incoming drafts from the automation pipeline and decide what goes live next.</p>
 	</div>
 
 	{#if data.reviewStatus}
@@ -38,33 +38,13 @@
                                         ? 'The story was approved and moved to the published desk.'
                                         : 'The story was rejected and cleared from the pending desk.'}
 			</p>
-			{#if data.workflowStatus === 'sent'}
-                                <p class="note">Workflow resume signal sent successfully.</p>
-			{:else if data.workflowStatus === 'skipped'}
-				<p class="note">
-					{data.workflowMessage ??
-                                                'Workflow signal was skipped because this story has no stored Mistral execution ID, or `MISTRAL_API_KEY` is not configured yet.'}
-				</p>
-			{:else if data.workflowStatus === 'failed'}
-				<p class="note warning-note">
-					{data.workflowMessage ??
-                                                'The story status changed, but the workflow callback failed and may need a retry.'}
-				</p>
-			{/if}
+                        <p class="note">The workflow already delivered the draft. Editorial approval now lives fully in this desk.</p>
 
 			<div class="status-footer">
 				<span
                                         >{data.reviewStatus === 'approved' ? 'Published desk updated' : 'Pending desk updated'}</span
 				>
-				<span>
-					{data.workflowStatus === 'sent'
-						? 'Workflow resumed'
-						: data.workflowStatus === 'failed'
-							? 'Workflow retry may be needed'
-							: data.workflowStatus === 'skipped'
-								? 'Workflow step skipped'
-								: 'No workflow update'}
-				</span>
+                                <span>Workflow already completed</span>
 			</div>
 		</div>
 	{/if}
@@ -103,7 +83,7 @@
 								<p class="subtitle">{article.title_en}</p>
 							{/if}
 						</div>
-                                                <span class="badge">{formatLabel(article.hype_level)} signal</span>
+                                                <span class="badge">{formatLabel(article.hype_level)} priority</span>
 					</div>
 
 					<div class="meta">
@@ -180,10 +160,6 @@
 		margin-top: 0.65rem;
 		font-size: 0.95rem;
 		color: #166534;
-	}
-
-	.warning-note {
-		color: #9a3412;
 	}
 
 	.status-footer {
