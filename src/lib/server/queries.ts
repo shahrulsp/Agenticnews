@@ -179,7 +179,37 @@ export async function createDraftArticle(
 				$11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
 				$22, $23, $24, $25, $26
 			)
-			RETURNING *
+                        ON CONFLICT (slug) DO UPDATE
+                        SET status = 'pending',
+                                category = EXCLUDED.category,
+                                region = EXCLUDED.region,
+                                hype_level = EXCLUDED.hype_level,
+                                ai_generated = EXCLUDED.ai_generated,
+                                agent_run_id = EXCLUDED.agent_run_id,
+                                tags = EXCLUDED.tags,
+                                source_url = EXCLUDED.source_url,
+                                source_name = EXCLUDED.source_name,
+                                source_date = EXCLUDED.source_date,
+                                factcheck_verdict = EXCLUDED.factcheck_verdict,
+                                factcheck_confidence = EXCLUDED.factcheck_confidence,
+                                factcheck_summary = EXCLUDED.factcheck_summary,
+                                title_ms = EXCLUDED.title_ms,
+                                body_ms = EXCLUDED.body_ms,
+                                reality_check_ms = EXCLUDED.reality_check_ms,
+                                takeaway_ms = EXCLUDED.takeaway_ms,
+                                prompt_question_ms = EXCLUDED.prompt_question_ms,
+                                title_en = EXCLUDED.title_en,
+                                body_en = EXCLUDED.body_en,
+                                reality_check_en = EXCLUDED.reality_check_en,
+                                takeaway_en = EXCLUDED.takeaway_en,
+                                prompt_question_en = EXCLUDED.prompt_question_en,
+                                image_url = EXCLUDED.image_url,
+                                image_alt = EXCLUDED.image_alt,
+                                image_caption = EXCLUDED.image_caption,
+                                published_at = NULL,
+                                updated_at = NOW()
+                        WHERE articles.status IN ('pending', 'rejected')
+                        RETURNING *
 		`,
 		[
 			sanitized.slug,
@@ -214,7 +244,24 @@ export async function createDraftArticle(
 	const article = rows[0] as Article | undefined;
 
 	if (!article) {
-		throw new Error('Failed to create draft article');
+                const existingRows = await database.query(
+                        `
+                                SELECT status
+                                FROM articles
+                                WHERE slug = $1
+                                LIMIT 1
+                        `,
+                        [sanitized.slug]
+                );
+                const existingStatus = (existingRows[0] as Pick<Article, 'status'> | undefined)?.status;
+
+                if (existingStatus) {
+                        throw new Error(
+                                `A ${existingStatus} article already exists for slug "${sanitized.slug}".`
+                        );
+                }
+
+                throw new Error('Failed to create draft article');
 	}
 
 	return article;

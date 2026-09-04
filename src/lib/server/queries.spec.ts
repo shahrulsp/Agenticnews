@@ -93,7 +93,7 @@ describe('query helpers', () => {
 		);
 
 		expect(database.query).toHaveBeenCalledWith(
-			expect.stringContaining('INSERT INTO articles'),
+                        expect.stringContaining('ON CONFLICT (slug) DO UPDATE'),
 			expect.arrayContaining([
 				'Halo Dunia',
 				'<p>Isi</p>',
@@ -104,4 +104,54 @@ describe('query helpers', () => {
 			])
 		);
 	});
+
+        it('refreshes an existing pending draft when the same slug is ingested again', async () => {
+                const database = createMockDatabase([
+                        {
+                                id: 'article-789',
+                                slug: 'draft-story',
+                                status: 'pending'
+                        }
+                ]);
+
+                await createDraftArticle(
+                        {
+                                slug: 'draft-story',
+                                category: 'tech',
+                                region: 'global',
+                                hype_level: 'medium',
+                                title_ms: 'Updated title',
+                                body_ms: '<p>Updated body</p>'
+                        },
+                        { database }
+                );
+
+                expect(database.query).toHaveBeenCalledWith(
+                        expect.stringContaining("WHERE articles.status IN ('pending', 'rejected')"),
+                        expect.any(Array)
+                );
+        });
+
+        it('keeps a published slug protected when a duplicate draft is ingested', async () => {
+                const database = {
+                        query: vi
+                                .fn()
+                                .mockResolvedValueOnce([])
+                                .mockResolvedValueOnce([{ status: 'published' }])
+                } as unknown as DatabaseClient;
+
+                await expect(
+                        createDraftArticle(
+                                {
+                                        slug: 'draft-story',
+                                        category: 'tech',
+                                        region: 'global',
+                                        hype_level: 'medium',
+                                        title_ms: 'Updated title',
+                                        body_ms: '<p>Updated body</p>'
+                                },
+                                { database }
+                        )
+                ).rejects.toThrow('A published article already exists for slug "draft-story".');
+        });
 });
