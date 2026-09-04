@@ -60,11 +60,15 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
 		return json(responseBody, { status: 201 });
 	} catch (error) {
+                const message =
+                        error instanceof Error ? error.message : 'Unable to create draft article';
+                const status = message.includes('published article already exists for slug') ? 409 : 400;
+
 		return json(
 			{
-				error: error instanceof Error ? error.message : 'Unable to create draft article'
+                                error: message
 			},
-			{ status: 400 }
+                        { status }
 		);
 	}
 };

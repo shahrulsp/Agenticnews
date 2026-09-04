@@ -132,4 +132,43 @@ describe('POST /api/internal/drafts', () => {
 		expect(parseDraftIngestPayload).not.toHaveBeenCalled();
 		expect(createDraftArticle).not.toHaveBeenCalled();
 	});
+
+        it('returns a conflict when a published article already owns the slug', async () => {
+                vi.mocked(isAuthorizedIngestRequest).mockReturnValue(true);
+                vi.mocked(hasDatabaseConfig).mockReturnValue(true);
+                vi.mocked(parseDraftIngestPayload).mockReturnValue({
+                        slug: 'hello-world',
+                        category: 'tech',
+                        region: 'global',
+                        hype_level: 'medium',
+                        title_ms: 'Halo Dunia',
+                        body_ms: '<p>Isi BM</p>'
+                });
+                vi.mocked(createDraftArticle).mockRejectedValue(
+                        new Error('A published article already exists for slug "hello-world".')
+                );
+
+                const request = new Request('http://localhost/api/internal/drafts', {
+                        method: 'POST',
+                        headers: {
+                                authorization: 'Bearer secret-token',
+                                'content-type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                                article: {
+                                        slug: 'hello-world'
+                                }
+                        })
+                });
+
+                const response = await POST({
+                        request,
+                        url: new URL('http://localhost/api/internal/drafts')
+                } as Parameters<typeof POST>[0]);
+
+                expect(response.status).toBe(409);
+                await expect(response.json()).resolves.toEqual({
+                        error: 'A published article already exists for slug "hello-world".'
+                });
+        });
 });
