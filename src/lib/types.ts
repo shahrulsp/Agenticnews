@@ -1,7 +1,7 @@
 export type ArticleStatus = 'pending' | 'published' | 'rejected' | 'archived';
 
 export type ArticleCategory =
-	'breaking' | 'tech' | 'weird' | 'popculture' | 'viral' | 'business' | 'science' | 'offbeat';
+        'breaking' | 'tech' | 'weird' | 'popculture' | 'viral' | 'business' | 'science' | 'offbeat' | 'crime';
 
 export type ArticleRegion =
 	| 'malaysia'

@@ -49,13 +49,14 @@ Optional worker environment variables:
 ## Pre-deploy checklist
 
 1. Confirm the database schema is applied with `db/001_init.sql`.
-2. Confirm admin secrets are real values, not placeholders.
-3. Confirm `ADMIN_PASSWORD_HASH` keeps escaped dollar signs in env files.
-4. Confirm `INTERNAL_INGEST_TOKEN` is a real random bearer token.
-5. Confirm the Railway worker has the same `MISTRAL_API_KEY` expected by the app.
-6. Confirm the Railway worker has the same `INTERNAL_INGEST_TOKEN` configured in the app.
-7. Confirm `AGENTICNEWS_BASE_URL` points at the deployed web app origin.
-8. Confirm the worker logs show `agenticnews-review` registered successfully.
+2. If the database predates the `crime` category, apply `db/003_add_crime_category.sql`.
+3. Confirm admin secrets are real values, not placeholders.
+4. Confirm `ADMIN_PASSWORD_HASH` keeps escaped dollar signs in env files.
+5. Confirm `INTERNAL_INGEST_TOKEN` is a real random bearer token.
+6. Confirm the Railway worker has the same `MISTRAL_API_KEY` expected by the app.
+7. Confirm the Railway worker has the same `INTERNAL_INGEST_TOKEN` configured in the app.
+8. Confirm `AGENTICNEWS_BASE_URL` points at the deployed web app origin.
+9. Confirm the worker logs show `agenticnews-review` registered successfully.
 
 ## Release checklist
 
@@ -68,10 +69,10 @@ Optional worker environment variables:
 3. Deploy the SvelteKit app.
 4. Open `/admin/login` and confirm admin sign-in still works.
 5. Trigger a workflow execution or wait for the 7:00 AM MYT schedule.
-6. Confirm a new pending draft appears in `/admin`.
-7. Approve or reject the draft from `/admin`.
+6. Confirm a batch of 5-10 pending drafts appears in `/admin`.
+7. Filter and review the drafts from `/admin`, including the `crime` lane when present.
 8. Confirm the app redirects with the expected editorial review banner.
-9. Confirm the workflow execution completes after draft ingest.
+9. Confirm the workflow execution completes after batch ingest.
 
 ## Smoke test commands
 
@@ -94,13 +95,14 @@ The execute endpoint for the worker accepts this body shape:
 ```json
 {
 	"input": {
-                "slug": "agenticnews-morning-run",
+                "slug": "gempaknews-morning-run",
+                "count": 7,
                 "topic": "AI and technology trends shaping Asia today"
 	}
 }
 ```
 
-The worker turns that base slug into a daily slug such as `agenticnews-morning-run-2026-09-04` before posting the draft into Agenticnews.
+The worker turns that base slug into deterministic daily batch slugs such as `gempaknews-morning-run-2026-09-04-01` through `gempaknews-morning-run-2026-09-04-07` before posting the drafts into Agenticnews.
 
 ## Cleanup
 

@@ -9,6 +9,7 @@ Agenticnews is a bilingual SvelteKit news site with a protected admin review flo
 - Server-side sanitization on both write and render
 - Internal draft ingest endpoint for workflow payloads
 - Separate editorial review in `/admin` after workflow delivery
+- Morning workflow batches that can deliver 5-10 drafts into the desk
 
 ## Local setup
 
@@ -42,6 +43,12 @@ Apply the initial schema in your Neon database:
 
 ```sh
 psql "$NEON_DATABASE_URL" -f db/001_init.sql
+```
+
+If your database already exists from an older setup, also apply:
+
+```sh
+psql "$NEON_DATABASE_URL" -f db/003_add_crime_category.sql
 ```
 
 Optional local seed:
@@ -193,11 +200,11 @@ Mistral Workflows runs in hybrid mode: Mistral hosts the orchestrator, and your 
 
 1. Install Python 3.12+ and `uv`.
 2. Scaffold a workflow project with `uvx mistralai-workflows-cli setup`.
-3. Define a workflow that generates a draft and posts it into Agenticnews.
+3. Define a workflow that generates a batch of drafts and posts them into Agenticnews.
 4. Start the worker locally so it auto-registers the workflow with Mistral.
 5. Make sure the worker also knows `AGENTICNEWS_BASE_URL` and `INTERNAL_INGEST_TOKEN`.
 6. Trigger one execution from the Mistral Console or API.
-7. Confirm the worker inserts a pending article into Agenticnews, then approve or reject it from `/admin`.
+7. Confirm the worker inserts a pending batch into Agenticnews, then approve or reject the drafts from `/admin`.
 
 Minimal example:
 
@@ -206,19 +213,20 @@ from pydantic import BaseModel
 import mistralai.workflows as workflows
 
 class ReviewInput(BaseModel):
-    slug: str = "agenticnews-morning-run"
+    slug: str = "gempaknews-morning-run"
+    count: int = 7
     topic: str = "AI and technology trends shaping Asia today"
 
 @workflows.workflow.define(
     name="agenticnews-review",
     workflow_display_name="Agenticnews Review",
-    workflow_description="Generates a draft and posts it into Agenticnews for editorial review."
+    workflow_description="Generates a morning batch and posts it into Agenticnews for editorial review."
 )
 class AgenticnewsReviewWorkflow:
     @workflows.workflow.entrypoint
     async def run(self, input: ReviewInput) -> dict:
-        # Generate and ingest the draft here, then finish.
-        return {"status": "draft_ingested"}
+        # Generate and ingest the batch here, then finish.
+        return {"status": "batch_ingested"}
 ```
 
 Start the worker:
@@ -237,7 +245,7 @@ Trigger the workflow from the Mistral Console, or by API:
 curl -X POST "https://api.mistral.ai/v1/workflows/agenticnews-review/execute" \
   -H "Authorization: Bearer $MISTRAL_API_KEY" \
   -H "Content-Type: application/json" \
-  --data '{"input":{"slug":"agenticnews-morning-run","topic":"AI and technology trends shaping Asia today"}}'
+  --data '{"input":{"slug":"gempaknews-morning-run","count":7,"topic":"AI and technology trends shaping Asia today"}}'
 ```
 
 After that, list the runs and grab the real execution ID:
@@ -246,7 +254,7 @@ After that, list the runs and grab the real execution ID:
 npm run list:workflow-runs -- --search agenticnews-review
 ```
 
-The worker should now post the draft into Agenticnews automatically. Seeing the execution remain in `RUNNING` is expected until the admin sends approval or rejection from `/admin`.
+The worker should now post the batch into Agenticnews automatically. After the ingest finishes, the workflow should complete and the drafts should be waiting in `/admin`.
 
 Official references:
 

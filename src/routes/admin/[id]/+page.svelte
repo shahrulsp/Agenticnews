@@ -18,7 +18,7 @@
 </script>
 
 <section class="detail-page">
-	<a class="back-link" href={resolve('/admin')}>Back to pending review</a>
+        <a class="back-link" href={resolve('/admin')}>Back to morning queue</a>
 
 	{#if !data.databaseReady}
 		<div class="message-card">
@@ -68,7 +68,7 @@
 			<div>
 				<p class="label">Editorial action</p>
 				<p class="action-copy">
-					Publish this draft or reject it and remove it from the pending queue.
+                                        Make the publishing call for this draft, then return to the queue for the next story.
 				</p>
 			</div>
 

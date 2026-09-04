@@ -21,7 +21,8 @@ BEGIN
 			'viral',
 			'business',
 			'science',
-			'offbeat'
+                        'offbeat',
+                        'crime'
 		);
 	END IF;
 END $$;

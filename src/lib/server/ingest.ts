@@ -17,7 +17,8 @@ const ARTICLE_CATEGORIES: ArticleCategory[] = [
 	'viral',
 	'business',
 	'science',
-	'offbeat'
+        'offbeat',
+        'crime'
 ];
 
 const ARTICLE_REGIONS: ArticleRegion[] = [

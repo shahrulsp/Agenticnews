@@ -78,6 +78,25 @@ describe('parseDraftIngestPayload', () => {
 		expect(parsed.agent_run_id).toBe('wf-execution-123');
 	});
 
+        it('accepts the crime category for batch editorial drafts', () => {
+                const parsed = parseDraftIngestPayload({
+                        article: {
+                                slug: 'city-crime-watch',
+                                category: 'crime',
+                                region: 'malaysia',
+                                hype_level: 'high',
+                                workflow_execution_id: 'wf-execution-999',
+                                ms: {
+                                        title: 'Bandar dalam perhatian',
+                                        body: '<p>Draf jenayah pagi.</p>'
+                                }
+                        }
+                });
+
+                expect(parsed.category).toBe('crime');
+                expect(parsed.region).toBe('malaysia');
+        });
+
 	it('throws when required workflow fields are missing', () => {
 		expect(() =>
 			parseDraftIngestPayload({
