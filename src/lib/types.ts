@@ -87,6 +87,19 @@ export interface ArticleDraftInput {
 	image_caption?: string | null;
 }
 
+export interface ArticleDraftEditorInput {
+        title_ms: string;
+        body_ms: string;
+        title_en?: string | null;
+        body_en?: string | null;
+        source_name?: string | null;
+        source_url?: string | null;
+        source_date?: string | null;
+        factcheck_verdict?: FactCheckVerdict;
+        factcheck_confidence?: number;
+        factcheck_summary?: string | null;
+}
+
 export interface InternalDraftLocalePayload {
 	title?: string;
 	body?: string;

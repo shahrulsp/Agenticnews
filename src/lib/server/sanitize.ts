@@ -1,6 +1,6 @@
 import sanitizeHtml from 'sanitize-html';
 
-import type { Article, ArticleDraftInput } from '$lib/types';
+import type { Article, ArticleDraftEditorInput, ArticleDraftInput } from '$lib/types';
 
 const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
         allowedTags: [
@@ -80,6 +80,23 @@ export function sanitizeArticleDraftInput(input: ArticleDraftInput): ArticleDraf
 		image_alt: sanitizePlainText(input.image_alt),
 		image_caption: sanitizePlainText(input.image_caption)
 	};
+}
+
+export function sanitizeArticleDraftEditorInput(
+        input: ArticleDraftEditorInput
+): ArticleDraftEditorInput {
+        return {
+                title_ms: sanitizePlainText(input.title_ms) ?? '',
+                body_ms: sanitizeRichText(input.body_ms) ?? '',
+                title_en: sanitizePlainText(input.title_en),
+                body_en: sanitizeRichText(input.body_en),
+                source_name: sanitizePlainText(input.source_name),
+                source_url: sanitizePlainText(input.source_url),
+                source_date: sanitizePlainText(input.source_date),
+                factcheck_verdict: input.factcheck_verdict,
+                factcheck_confidence: input.factcheck_confidence,
+                factcheck_summary: sanitizeRichText(input.factcheck_summary)
+        };
 }
 
 export function sanitizeArticleForRender(article: Article): Article {

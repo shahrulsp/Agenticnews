@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Article, ArticleDraftInput } from '$lib/types';
+import type { Article, ArticleDraftEditorInput, ArticleDraftInput } from '$lib/types';
 
 import {
+        sanitizeArticleDraftEditorInput,
 	sanitizeArticleDraftInput,
 	sanitizeArticleForRender,
 	sanitizePlainText,
@@ -59,6 +60,36 @@ describe('sanitizeArticleDraftInput', () => {
 		expect(sanitized.image_caption).toBe('Caption');
 		expect(sanitized.factcheck_summary).toBe('<p>Checked</p>');
 	});
+});
+
+describe('sanitizeArticleDraftEditorInput', () => {
+        it('sanitizes editorial draft updates before persistence', () => {
+                const input: ArticleDraftEditorInput = {
+                        title_ms: 'Halo <strong>Dunia</strong>',
+                        body_ms: '<p>Isi</p><script>bad()</script>',
+                        title_en: 'Hello<script>bad()</script> World',
+                        body_en: '<p>English</p><script>bad()</script>',
+                        source_name: ' Example <strong>Desk</strong> ',
+                        source_url: ' https://example.com/story ',
+                        source_date: ' 2026-09-05 ',
+                        factcheck_verdict: 'disputed',
+                        factcheck_confidence: 42,
+                        factcheck_summary: '<p>Checked</p><script>bad()</script>'
+                };
+
+                const sanitized = sanitizeArticleDraftEditorInput(input);
+
+                expect(sanitized.title_ms).toBe('Halo Dunia');
+                expect(sanitized.body_ms).toBe('<p>Isi</p>');
+                expect(sanitized.title_en).toBe('Hello World');
+                expect(sanitized.body_en).toBe('<p>English</p>');
+                expect(sanitized.source_name).toBe('Example Desk');
+                expect(sanitized.source_url).toBe('https://example.com/story');
+                expect(sanitized.source_date).toBe('2026-09-05');
+                expect(sanitized.factcheck_verdict).toBe('disputed');
+                expect(sanitized.factcheck_confidence).toBe(42);
+                expect(sanitized.factcheck_summary).toBe('<p>Checked</p>');
+        });
 });
 
 describe('sanitizeArticleForRender', () => {

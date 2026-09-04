@@ -5,9 +5,12 @@ import {
 	approveArticle,
 	createDraftArticle,
 	getArticleBySlug,
+        getMorningBatchProgress,
+        getPendingArticleNavigator,
 	getPendingArticles,
 	getPublishedArticles,
-	rejectArticle
+        rejectArticle,
+        updatePendingArticleDraft
 } from './queries';
 
 function createMockDatabase(rows: unknown[] = []) {
@@ -67,6 +70,78 @@ describe('query helpers', () => {
 			['article-456']
 		);
 	});
+
+        it('updates a pending draft with sanitized editorial edits', async () => {
+                const database = createMockDatabase();
+
+                await updatePendingArticleDraft(
+                        'article-789',
+                        {
+                                title_ms: 'Halo <strong>Dunia</strong>',
+                                body_ms: '<p>Isi</p><script>bad()</script>',
+                                title_en: 'Hello<script>bad()</script> World',
+                                body_en: '<p>English</p><script>bad()</script>',
+                                source_name: ' Example <strong>Desk</strong> ',
+                                source_url: ' https://example.com/story ',
+                                source_date: ' 2026-09-05 ',
+                                factcheck_verdict: 'disputed',
+                                factcheck_confidence: 42,
+                                factcheck_summary: '<p>Checked</p><script>bad()</script>'
+                        },
+                        { database }
+                );
+
+                expect(database.query).toHaveBeenCalledWith(
+                        expect.stringContaining('UPDATE articles'),
+                        [
+                                'article-789',
+                                'Halo Dunia',
+                                '<p>Isi</p>',
+                                'Hello World',
+                                '<p>English</p>',
+                                'Example Desk',
+                                'https://example.com/story',
+                                '2026-09-05',
+                                'disputed',
+                                42,
+                                '<p>Checked</p>'
+                        ]
+                );
+        });
+
+        it('returns previous and next ids for pending queue navigation', async () => {
+                const database = createMockDatabase([{ id: 'first' }, { id: 'second' }, { id: 'third' }]);
+
+                const result = await getPendingArticleNavigator('second', { database });
+
+                expect(result).toEqual({
+                        previousId: 'first',
+                        nextId: 'third',
+                        position: 2,
+                        total: 3
+                });
+        });
+
+        it('summarizes batch progress for the current morning run', async () => {
+                const database = createMockDatabase([
+                        { slug: 'gempaknews-morning-run-2026-09-04-01', status: 'pending' },
+                        { slug: 'gempaknews-morning-run-2026-09-04-02', status: 'published' },
+                        { slug: 'gempaknews-morning-run-2026-09-04-03', status: 'rejected' }
+                ]);
+
+                const result = await getMorningBatchProgress('gempaknews-morning-run-2026-09-04-01', {
+                        database
+                });
+
+                expect(result).toEqual({
+                        batchSlugBase: 'gempaknews-morning-run-2026-09-04',
+                        scheduledDate: '2026-09-04',
+                        total: 3,
+                        pending: 1,
+                        published: 1,
+                        rejected: 1
+                });
+        });
 
 	it('sanitizes draft content before insert', async () => {
 		const database = createMockDatabase([
