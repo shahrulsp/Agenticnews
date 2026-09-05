@@ -97,6 +97,104 @@ describe('parseDraftIngestPayload', () => {
                 expect(parsed.region).toBe('malaysia');
         });
 
+        it('accepts Studio taxonomy categories and regions', () => {
+                const parsed = parseDraftIngestPayload({
+                        article: {
+                                slug: 'asia-sports-upset',
+                                category: 'sports',
+                                region: 'taiwan',
+                                hype_level: 'medium',
+                                factcheck_verdict: 'partially-verified',
+                                ms: {
+                                        title: 'Kejutan besar sukan Asia',
+                                        body: '<p>Isi BM</p>'
+                                }
+                        }
+                });
+
+                expect(parsed.category).toBe('sports');
+                expect(parsed.region).toBe('taiwan');
+                expect(parsed.factcheck_verdict).toBe('partially-verified');
+        });
+
+        it('maps expanded Studio metadata fields', () => {
+                const parsed = parseDraftIngestPayload({
+                        article: {
+                                slug: 'asia-viral-story',
+                                category: 'politics',
+                                region: 'bangladesh',
+                                hype_level: 'low',
+                                summary: 'Short story summary',
+                                why_viral: 'People are debating the public impact',
+                                key_claims: ['Claim A'],
+                                claims_made: ['Claim A', 'Claim B'],
+                                secondary_sources: ['https://example.com/2'],
+                                is_sensitive: true,
+                                form: 'deep',
+                                sensitivity_notes: 'Election-related sensitivity',
+                                quality_notes: 'Needs editor review on attribution',
+                                image_strategy: 'Use a crowd scene with polling visuals',
+                                image_source_recommendation: 'Getty editorial archive',
+                                image_notes_for_human: 'Avoid showing minors',
+                                glossary_notes: [
+                                        {
+                                                term: 'caretaker government',
+                                                note: 'Explain briefly in Malay'
+                                        }
+                                ],
+                                scout_payload: {
+                                        trend_score: 91
+                                },
+                                sentinel_payload: {
+                                        risk_level: 'medium'
+                                },
+                                lens_payload: {
+                                        visual_angle: 'polling-station'
+                                },
+                                polyglot_payload: {
+                                        translation_status: 'ready'
+                                },
+                                factcheck_verdict: 'unverified',
+                                ms: {
+                                        title: 'Tajuk BM',
+                                        body: '<p>Isi BM</p>'
+                                }
+                        }
+                });
+
+                expect(parsed.summary).toBe('Short story summary');
+                expect(parsed.why_viral).toBe('People are debating the public impact');
+                expect(parsed.key_claims).toEqual(['Claim A']);
+                expect(parsed.claims_made).toEqual(['Claim A', 'Claim B']);
+                expect(parsed.secondary_sources).toEqual(['https://example.com/2']);
+                expect(parsed.is_sensitive).toBe(true);
+                expect(parsed.form).toBe('deep');
+                expect(parsed.sensitivity_notes).toBe('Election-related sensitivity');
+                expect(parsed.quality_notes).toBe('Needs editor review on attribution');
+                expect(parsed.image_strategy).toBe('Use a crowd scene with polling visuals');
+                expect(parsed.image_source_recommendation).toBe('Getty editorial archive');
+                expect(parsed.image_notes_for_human).toBe('Avoid showing minors');
+                expect(parsed.glossary_notes).toEqual([
+                        {
+                                term: 'caretaker government',
+                                note: 'Explain briefly in Malay'
+                        }
+                ]);
+                expect(parsed.scout_payload).toEqual({
+                        trend_score: 91
+                });
+                expect(parsed.sentinel_payload).toEqual({
+                        risk_level: 'medium'
+                });
+                expect(parsed.lens_payload).toEqual({
+                        visual_angle: 'polling-station'
+                });
+                expect(parsed.polyglot_payload).toEqual({
+                        translation_status: 'ready'
+                });
+                expect(parsed.factcheck_verdict).toBe('unverified');
+        });
+
 	it('throws when required workflow fields are missing', () => {
 		expect(() =>
 			parseDraftIngestPayload({

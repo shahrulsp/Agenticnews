@@ -42,6 +42,37 @@ describe('sanitizeArticleDraftInput', () => {
 			category: 'tech',
 			region: 'global',
 			hype_level: 'medium',
+                        summary: ' Summary <strong>line</strong> ',
+                        why_viral: ' Why <em>viral</em> ',
+                        key_claims: [' Claim <strong>1</strong> ', 'Claim 2<script>bad()</script>'],
+                        claims_made: [' Claim <em>A</em> '],
+                        secondary_sources: [' https://example.com/secondary '],
+                        sensitivity_notes: ' Handle <script>bad()</script>carefully ',
+                        form: ' short ',
+                        scout_payload: {
+                                angle: ' Crowd <strong>reaction</strong> ',
+                                nested: {
+                                        note: ' <em>Keep</em> context '
+                                }
+                        },
+                        sentinel_payload: {
+                                risk_label: '<script>bad()</script>medium'
+                        },
+                        lens_payload: {
+                                visual_angle: ' Wide <strong>shot</strong> '
+                        },
+                        polyglot_payload: {
+                                translation_status: ' ready '
+                        },
+                        glossary_notes: [
+                                {
+                                        ' Term <strong>A</strong> ': ' Note <script>bad()</script>one '
+                                }
+                        ],
+                        quality_notes: ' Needs <em>desk</em> review ',
+                        image_strategy: ' Use <strong>arena</strong> stills ',
+                        image_source_recommendation: ' Getty <em>editorial</em> ',
+                        image_notes_for_human: ' Avoid <script>bad()</script>faces ',
 			title_ms: 'Halo <strong>Dunia</strong>',
 			body_ms: '<p>Isi</p><script>bad()</script>',
 			title_en: 'Hello<script>bad()</script> World',
@@ -59,6 +90,37 @@ describe('sanitizeArticleDraftInput', () => {
 		expect(sanitized.image_alt).toBe('Alt text');
 		expect(sanitized.image_caption).toBe('Caption');
 		expect(sanitized.factcheck_summary).toBe('<p>Checked</p>');
+                expect(sanitized.summary).toBe('Summary line');
+                expect(sanitized.why_viral).toBe('Why viral');
+                expect(sanitized.key_claims).toEqual(['Claim 1', 'Claim 2']);
+                expect(sanitized.claims_made).toEqual(['Claim A']);
+                expect(sanitized.secondary_sources).toEqual(['https://example.com/secondary']);
+                expect(sanitized.sensitivity_notes).toBe('Handle carefully');
+                expect(sanitized.form).toBe('short');
+                expect(sanitized.scout_payload).toEqual({
+                        angle: 'Crowd reaction',
+                        nested: {
+                                note: 'Keep context'
+                        }
+                });
+                expect(sanitized.sentinel_payload).toEqual({
+                        risk_label: 'medium'
+                });
+                expect(sanitized.lens_payload).toEqual({
+                        visual_angle: 'Wide shot'
+                });
+                expect(sanitized.polyglot_payload).toEqual({
+                        translation_status: 'ready'
+                });
+                expect(sanitized.glossary_notes).toEqual([
+                        {
+                                'Term A': 'Note one'
+                        }
+                ]);
+                expect(sanitized.quality_notes).toBe('Needs desk review');
+                expect(sanitized.image_strategy).toBe('Use arena stills');
+                expect(sanitized.image_source_recommendation).toBe('Getty editorial');
+                expect(sanitized.image_notes_for_human).toBe('Avoid faces');
 	});
 });
 
@@ -110,6 +172,35 @@ describe('sanitizeArticleForRender', () => {
 			factcheck_verdict: 'verified',
 			factcheck_confidence: 90,
 			factcheck_summary: '<p>Checked<script>alert(1)</script></p>',
+                        summary: ' Summary <strong>line</strong> ',
+                        why_viral: ' Why <em>viral</em> ',
+                        key_claims: [' Claim <strong>1</strong> '],
+                        claims_made: [' Claim <em>A</em> '],
+                        secondary_sources: [' https://example.com/secondary '],
+                        sensitivity_notes: ' Handle <script>bad()</script>carefully ',
+                        is_sensitive: true,
+                        form: ' short ',
+                        scout_payload: {
+                                angle: ' Crowd <strong>reaction</strong> '
+                        },
+                        sentinel_payload: {
+                                risk_label: '<script>bad()</script>medium'
+                        },
+                        lens_payload: {
+                                visual_angle: ' Wide <strong>shot</strong> '
+                        },
+                        polyglot_payload: {
+                                translation_status: ' ready '
+                        },
+                        glossary_notes: [
+                                {
+                                        ' Term <strong>A</strong> ': ' Note <script>bad()</script>one '
+                                }
+                        ],
+                        quality_notes: ' Needs <em>desk</em> review ',
+                        image_strategy: ' Use <strong>arena</strong> stills ',
+                        image_source_recommendation: ' Getty <em>editorial</em> ',
+                        image_notes_for_human: ' Avoid <script>bad()</script>faces ',
 			title_ms: 'Halo Dunia',
 			body_ms: '<p>Isi <strong>BM</strong></p><script>bad()</script>',
 			reality_check_ms: '<p>Semakan</p>',
@@ -133,5 +224,33 @@ describe('sanitizeArticleForRender', () => {
 		expect(sanitized.body_ms).toBe('<p>Isi <strong>BM</strong></p>');
 		expect(sanitized.factcheck_summary).toBe('<p>Checked</p>');
 		expect(sanitized.prompt_question_en).toBe('<p>Prompt</p>');
+                expect(sanitized.summary).toBe('Summary line');
+                expect(sanitized.why_viral).toBe('Why viral');
+                expect(sanitized.key_claims).toEqual(['Claim 1']);
+                expect(sanitized.claims_made).toEqual(['Claim A']);
+                expect(sanitized.secondary_sources).toEqual(['https://example.com/secondary']);
+                expect(sanitized.sensitivity_notes).toBe('Handle carefully');
+                expect(sanitized.form).toBe('short');
+                expect(sanitized.scout_payload).toEqual({
+                        angle: 'Crowd reaction'
+                });
+                expect(sanitized.sentinel_payload).toEqual({
+                        risk_label: 'medium'
+                });
+                expect(sanitized.lens_payload).toEqual({
+                        visual_angle: 'Wide shot'
+                });
+                expect(sanitized.polyglot_payload).toEqual({
+                        translation_status: 'ready'
+                });
+                expect(sanitized.glossary_notes).toEqual([
+                        {
+                                'Term A': 'Note one'
+                        }
+                ]);
+                expect(sanitized.quality_notes).toBe('Needs desk review');
+                expect(sanitized.image_strategy).toBe('Use arena stills');
+                expect(sanitized.image_source_recommendation).toBe('Getty editorial');
+                expect(sanitized.image_notes_for_human).toBe('Avoid faces');
 	});
 });

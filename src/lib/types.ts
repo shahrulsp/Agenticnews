@@ -1,7 +1,18 @@
 export type ArticleStatus = 'pending' | 'published' | 'rejected' | 'archived';
 
 export type ArticleCategory =
-        'breaking' | 'tech' | 'weird' | 'popculture' | 'viral' | 'business' | 'science' | 'offbeat' | 'crime';
+        | 'breaking'
+        | 'tech'
+        | 'weird'
+        | 'popculture'
+        | 'viral'
+        | 'business'
+        | 'science'
+        | 'offbeat'
+        | 'crime'
+        | 'politics'
+        | 'entertainment'
+        | 'sports';
 
 export type ArticleRegion =
 	| 'malaysia'
@@ -12,17 +23,29 @@ export type ArticleRegion =
 	| 'vietnam'
 	| 'japan'
 	| 'south-korea'
-	| 'china'
 	| 'india'
+        | 'taiwan'
+        | 'bangladesh'
+        | 'sri-lanka'
+        | 'china'
 	| 'other-asia'
 	| 'global';
 
 export type HypeLevel = 'low' | 'medium' | 'high' | 'extreme';
 
 export type FactCheckVerdict =
-	'verified' | 'mostly-true' | 'disputed' | 'unverifiable' | 'false' | 'pending';
+        | 'verified'
+        | 'mostly-true'
+        | 'partially-verified'
+        | 'disputed'
+        | 'unverifiable'
+        | 'unverified'
+        | 'false'
+        | 'pending';
 
 export type Locale = 'ms' | 'en';
+export type AgentMetadataPayload = Record<string, unknown>;
+export type GlossaryNote = Record<string, string>;
 
 export interface Article {
 	id: string;
@@ -53,6 +76,23 @@ export interface Article {
 	image_url: string | null;
 	image_alt: string | null;
 	image_caption: string | null;
+        form?: string | null;
+        summary?: string | null;
+        why_viral?: string | null;
+        key_claims?: string[] | null;
+        claims_made?: string[] | null;
+        secondary_sources?: string[] | null;
+        sensitivity_notes?: string | null;
+        is_sensitive?: boolean;
+        scout_payload?: AgentMetadataPayload | null;
+        sentinel_payload?: AgentMetadataPayload | null;
+        lens_payload?: AgentMetadataPayload | null;
+        polyglot_payload?: AgentMetadataPayload | null;
+        glossary_notes?: GlossaryNote[] | null;
+        quality_notes?: string | null;
+        image_strategy?: string | null;
+        image_source_recommendation?: string | null;
+        image_notes_for_human?: string | null;
 	created_at: string;
 	updated_at: string;
 	published_at: string | null;
@@ -85,6 +125,23 @@ export interface ArticleDraftInput {
 	image_url?: string | null;
 	image_alt?: string | null;
 	image_caption?: string | null;
+        form?: string | null;
+        summary?: string | null;
+        why_viral?: string | null;
+        key_claims?: string[] | null;
+        claims_made?: string[] | null;
+        secondary_sources?: string[] | null;
+        sensitivity_notes?: string | null;
+        is_sensitive?: boolean;
+        scout_payload?: AgentMetadataPayload | null;
+        sentinel_payload?: AgentMetadataPayload | null;
+        lens_payload?: AgentMetadataPayload | null;
+        polyglot_payload?: AgentMetadataPayload | null;
+        glossary_notes?: GlossaryNote[] | null;
+        quality_notes?: string | null;
+        image_strategy?: string | null;
+        image_source_recommendation?: string | null;
+        image_notes_for_human?: string | null;
 }
 
 export interface ArticleDraftEditorInput {
@@ -127,6 +184,23 @@ export interface InternalDraftArticlePayload {
 	image_url?: string | null;
 	image_alt?: string | null;
 	image_caption?: string | null;
+        form?: string | null;
+        summary?: string | null;
+        why_viral?: string | null;
+        key_claims?: string[] | null;
+        claims_made?: string[] | null;
+        secondary_sources?: string[] | null;
+        sensitivity_notes?: string | null;
+        is_sensitive?: boolean;
+        scout_payload?: AgentMetadataPayload | null;
+        sentinel_payload?: AgentMetadataPayload | null;
+        lens_payload?: AgentMetadataPayload | null;
+        polyglot_payload?: AgentMetadataPayload | null;
+        glossary_notes?: GlossaryNote[] | null;
+        quality_notes?: string | null;
+        image_strategy?: string | null;
+        image_source_recommendation?: string | null;
+        image_notes_for_human?: string | null;
 }
 
 export interface InternalDraftIngestPayload {

@@ -61,9 +61,12 @@
 	}
 
 	.admin-content {
-		max-width: 56rem;
-		margin: 0 auto;
-		padding: 2rem;
+                width: 100%;
+                max-width: none;
+                margin: 0;
+                padding: 1.5rem;
+                box-sizing: border-box;
+                overflow-x: clip;
 	}
 
 	.logout-button {
@@ -80,4 +83,14 @@
 	.logout-button:hover {
 		border-color: #94a3b8;
 	}
+
+        @media (max-width: 720px) {
+                .admin-header {
+                        padding: 1rem;
+                }
+
+                .admin-content {
+                        padding: 1rem;
+                }
+        }
 </style>

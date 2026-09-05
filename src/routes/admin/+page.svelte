@@ -8,7 +8,9 @@
 
         let { data }: { data: PageData } = $props();
 
-        let activeFilter = $state('all');
+        let activeSection = $state<'overview' | 'drafts' | 'published'>('overview');
+        let draftFilter = $state<'all' | string>('all');
+        let publishedFilter = $state<'all' | string>('all');
         let lastOpenedDraft = $state<{
                 id: string;
                 title: string;
@@ -35,53 +37,84 @@
         }
 
         function formatSourceHost(value: string | null): string {
-                if (!value) {
-                        return 'Source unavailable';
-                }
+                        if (!value) {
+                                return 'Source unavailable';
+                        }
 
-                try {
-                        return new URL(value).hostname.replace(/^www\./, '');
-                } catch {
-                        return value;
-                }
+                        try {
+                                return new URL(value).hostname.replace(/^www\./, '');
+                        } catch {
+                                return value;
+                        }
         }
 
-        function formatSourceFreshness(value: string | null): string | null {
+        function formatCompactDate(value: string | null): string {
                 if (!value) {
-                        return null;
-                }
-
-                const parsedValue = new Date(value);
-
-                if (Number.isNaN(parsedValue.getTime())) {
-                        return null;
+                        return 'Not set';
                 }
 
                 return new Intl.DateTimeFormat('en-MY', {
                         dateStyle: 'medium'
-                }).format(parsedValue);
+                }).format(new Date(value));
+        }
+
+        function stripHtml(value: string | null): string {
+                if (!value) {
+                        return '';
+                }
+
+                return value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        }
+
+        function summarizeArticle(article: Article): string {
+                const plainText = stripHtml(article.body_ms || article.body_en);
+                return plainText.length > 150 ? `${plainText.slice(0, 147)}...` : plainText;
+        }
+
+        function summarizeStudioText(
+                value: string | null | undefined,
+                fallback: string,
+                maxLength = 100
+        ): string {
+                const plainText = stripHtml(value ?? null);
+
+                if (!plainText) {
+                        return fallback;
+                }
+
+                return plainText.length > maxLength ? `${plainText.slice(0, maxLength - 3)}...` : plainText;
+        }
+
+        function getStudioFlags(article: Article): Array<{ label: string; tone: 'warn-tag' | 'neutral-tag' }> {
+                const flags: Array<{ label: string; tone: 'warn-tag' | 'neutral-tag' }> = [];
+
+                if (article.is_sensitive) {
+                        flags.push({ label: 'Sensitive', tone: 'warn-tag' });
+                }
+
+                if (article.sensitivity_notes) {
+                        flags.push({ label: 'Notes', tone: 'neutral-tag' });
+                }
+
+                return flags;
         }
 
         function getSourceQualityFlags(article: Article): string[] {
                 const flags: string[] = [];
 
                 if (!article.source_url) {
-                        flags.push('Missing source URL');
+                        flags.push('Missing URL');
                 }
 
                 if (!article.source_name) {
-                        flags.push('Missing source name');
+                        flags.push('Missing source');
                 }
 
-                if (!formatSourceFreshness(article.source_date)) {
-                        flags.push('Missing source date');
+                if (!article.source_date) {
+                        flags.push('Missing date');
                 }
 
                 return flags;
-        }
-
-        function getSourceWatchLabel(flagCount: number): string {
-                return flagCount > 1 ? `${flagCount} source gaps` : 'Source watch';
         }
 
         function getVerificationFlags(article: Article): string[] {
@@ -106,23 +139,6 @@
                 return flags;
         }
 
-        function getVerificationWatchLabel(flagCount: number): string {
-                return flagCount > 1 ? `${flagCount} verification gaps` : 'Verification watch';
-        }
-
-        function stripHtml(value: string | null): string {
-                if (!value) {
-                        return '';
-                }
-
-                return value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-        }
-
-        function summarizeArticle(article: Article): string {
-                const plainText = stripHtml(article.body_ms || article.body_en);
-                return plainText.length > 180 ? `${plainText.slice(0, 177)}...` : plainText;
-        }
-
         function countHighPriority(articles: Article[]): number {
                 return articles.filter((article) => article.hype_level === 'high' || article.hype_level === 'extreme')
                         .length;
@@ -144,123 +160,73 @@
                         }));
         }
 
-        function isUrgent(article: Article): boolean {
-                return article.hype_level === 'high' || article.hype_level === 'extreme';
-        }
-
-        function getEditorialPriority(article: Article): number {
-                let score = 0;
-
-                if (article.hype_level === 'extreme') {
-                        score += 5;
-                } else if (article.hype_level === 'high') {
-                        score += 4;
-                } else if (article.hype_level === 'medium') {
-                        score += 2;
-                }
-
-                if (article.category === 'crime') {
-                        score += 3;
-                }
-
-                if (article.factcheck_verdict === 'pending') {
-                        score += 2;
-                } else if (article.factcheck_confidence < 60) {
-                        score += 1;
-                }
-
-                if (!article.source_name) {
-                        score += 1;
-                }
-
-                return score;
-        }
-
-        function buildPriorityReason(article: Article): string {
-                if (article.hype_level === 'extreme' || article.hype_level === 'high') {
-                        return 'High-signal story. Make the framing call early while the desk is fresh.';
-                }
-
-                if (article.category === 'crime') {
-                        return 'Crime lane story. Give tone, sourcing, and verification a careful first pass.';
-                }
-
-                if (article.factcheck_verdict === 'pending' || article.factcheck_confidence < 60) {
-                        return 'Verification still needs a sharper editorial eye before this moves further.';
-                }
-
-                return 'Strong candidate for the next pass based on the current morning queue balance.';
-        }
-
-        function buildTriageGroups(articles: Article[]): Array<{
-                key: string;
-                title: string;
-                description: string;
-                count: number;
-                articles: Article[];
-        }> {
-                const urgentArticles = articles.filter((article) => isUrgent(article));
-                const crimeArticles = articles.filter((article) => article.category === 'crime' && !isUrgent(article));
-                const deskArticles = articles.filter(
-                        (article) => !isUrgent(article) && article.category !== 'crime'
-                );
+        function buildDeskBreakdown(articles: Article[]): Array<{ label: string; value: number; tone: string }> {
+                const sourceWatch = articles.filter((article) => getSourceQualityFlags(article).length > 0).length;
+                const verificationWatch = articles.filter(
+                        (article) => getVerificationFlags(article).length > 0
+                ).length;
+                const crimeLane = articles.filter((article) => article.category === 'crime').length;
 
                 return [
-                        {
-                                key: 'urgent',
-                                title: 'Urgent first',
-                                description: 'Higher-signal stories that deserve the first editorial call.',
-                                count: urgentArticles.length,
-                                articles: urgentArticles
-                        },
-                        {
-                                key: 'crime',
-                                title: 'Crime lane',
-                                description: 'Crime and public-safety stories grouped for careful tone and verification review.',
-                                count: crimeArticles.length,
-                                articles: crimeArticles
-                        },
-                        {
-                                key: 'desk',
-                                title: 'Everything else',
-                                description: 'The remaining morning desk once urgent and crime calls are handled.',
-                                count: deskArticles.length,
-                                articles: deskArticles
-                        }
-                ].filter((group) => group.count > 0);
+                        { label: 'Urgent watch', value: countHighPriority(articles), tone: 'warm' },
+                        { label: 'Crime lane', value: crimeLane, tone: 'rose' },
+                        { label: 'Source watch', value: sourceWatch, tone: 'amber' },
+                        { label: 'Verification watch', value: verificationWatch, tone: 'blue' }
+                ];
         }
 
-        const categoryCounts = $derived(buildCategoryCounts(data.articles));
-        const filterOptions = $derived([
-                { value: 'all', label: 'All lanes', count: data.articles.length },
-                ...categoryCounts
-        ]);
-        const filteredArticles = $derived(
-                activeFilter === 'all'
-                        ? data.articles
-                        : data.articles.filter((article) => article.category === activeFilter)
-        );
+        const draftCategoryCounts = $derived(buildCategoryCounts(data.articles));
+        const publishedCategoryCounts = $derived(buildCategoryCounts(data.publishedArticles));
         const latestArrival = $derived(data.articles[0]?.created_at ?? null);
-        const activeCategories = $derived(categoryCounts.length);
-        const urgentCount = $derived(countHighPriority(data.articles));
-        const sourceWatchCount = $derived(
-                data.articles.filter((article) => getSourceQualityFlags(article).length > 0).length
-        );
-        const verificationWatchCount = $derived(
-                data.articles.filter((article) => getVerificationFlags(article).length > 0).length
-        );
-        const dualWatchCount = $derived(
-                data.articles.filter(
-                        (article) =>
-                                getSourceQualityFlags(article).length > 0 &&
-                                getVerificationFlags(article).length > 0
-                ).length
-        );
         const reviewedCount = $derived((data.batchProgress?.published ?? 0) + (data.batchProgress?.rejected ?? 0));
         const progressPercent = $derived(
                 data.batchProgress?.total ? Math.round((reviewedCount / data.batchProgress.total) * 100) : 0
         );
-        const triageGroups = $derived(buildTriageGroups(filteredArticles));
+        const draftOverviewCards = $derived([
+                {
+                        label: 'Pending drafts',
+                        value: String(data.articles.length),
+                        note: latestArrival ? `Latest arrival ${formatDate(latestArrival)}` : 'Desk is clear',
+                        tone: 'neutral'
+                },
+                {
+                        label: 'Published today',
+                        value: String(data.batchProgress?.published ?? 0),
+                        note: data.batchProgress
+                                ? `${progressPercent}% of this morning run reviewed`
+                                : 'No tracked morning run yet',
+                        tone: 'green'
+                },
+                {
+                        label: 'Live categories',
+                        value: String(draftCategoryCounts.length),
+                        note: draftCategoryCounts.length > 0 ? 'Category mix across the active desk' : 'No active lanes',
+                        tone: 'blue'
+                },
+                {
+                        label: 'Published archive',
+                        value: String(data.publishedArticles.length),
+                        note: 'Latest published stories ready for quick review',
+                        tone: 'violet'
+                }
+        ]);
+        const draftDeskSignals = $derived(buildDeskBreakdown(data.articles));
+        const draftFilterOptions = $derived([
+                { value: 'all', label: 'All drafts', count: data.articles.length },
+                ...draftCategoryCounts
+        ]);
+        const publishedFilterOptions = $derived([
+                { value: 'all', label: 'All published', count: data.publishedArticles.length },
+                ...publishedCategoryCounts
+        ]);
+        const filteredDrafts = $derived(
+                draftFilter === 'all' ? data.articles : data.articles.filter((article) => article.category === draftFilter)
+        );
+        const filteredPublished = $derived(
+                publishedFilter === 'all'
+                        ? data.publishedArticles
+                        : data.publishedArticles.filter((article) => article.category === publishedFilter)
+        );
         const resumeArticle = $derived.by(() => {
                 const storedDraft = lastOpenedDraft;
 
@@ -270,29 +236,26 @@
 
                 return data.articles.find((article) => article.id === storedDraft.id) ?? null;
         });
-        const recommendedArticle = $derived.by(() => {
-                const [firstArticle, ...remainingArticles] = data.articles;
-
-                if (!firstArticle) {
-                        return null;
+        const sidebarMenu = $derived([
+                {
+                        key: 'overview',
+                        label: 'Operations overview',
+                        count: data.articles.length + data.publishedArticles.length,
+                        helper: 'Pulse, desk stats, and batch view'
+                },
+                {
+                        key: 'drafts',
+                        label: 'Draft queue',
+                        count: data.articles.length,
+                        helper: 'Pending stories waiting for editorial review'
+                },
+                {
+                        key: 'published',
+                        label: 'Published desk',
+                        count: data.publishedArticles.length,
+                        helper: 'Recently published stories and output overview'
                 }
-
-                return remainingArticles.reduce((bestArticle, article) => {
-                        const bestScore = getEditorialPriority(bestArticle);
-                        const articleScore = getEditorialPriority(article);
-
-                        if (articleScore !== bestScore) {
-                                return articleScore > bestScore ? article : bestArticle;
-                        }
-
-                        return new Date(article.created_at).getTime() < new Date(bestArticle.created_at).getTime()
-                                ? article
-                                : bestArticle;
-                }, firstArticle);
-        });
-        const showRecommendedArticle = $derived(
-                recommendedArticle && recommendedArticle.id !== resumeArticle?.id ? recommendedArticle : null
-        );
+        ]);
 
         onMount(() => {
                 const stored = window.localStorage.getItem(LAST_OPENED_DRAFT_KEY);
@@ -328,1313 +291,970 @@
         });
 </script>
 
-<section class="desk-shell">
-        <div class="header-copy">
-                <p class="eyebrow">Editorial desk</p>
-                <h2>Morning queue</h2>
-                <p>Work the full draft batch like a newsroom board: scan the lanes, filter by category, and open the next story that needs a call.</p>
-        </div>
-
-        {#if data.reviewStatus}
-                <div class="status-card success-card">
-                        <p class="label">Review updated</p>
-                        <p class="value">
-                                {data.reviewStatus === 'approved'
-                                        ? 'The story was approved and moved to the published desk.'
-                                        : 'The story was rejected and cleared from the pending desk.'}
+<section class="dashboard-shell">
+        <aside class="dashboard-sidebar">
+                <div class="sidebar-brand">
+                        <p class="eyebrow">Agenticnews</p>
+                        <h1>Editorial Ops</h1>
+                        <p class="sidebar-copy">
+                                A full-width newsroom dashboard for tracking the draft queue, publish flow, and operational signals in one place.
                         </p>
-                        <p class="note">The workflow already delivered the batch. Editorial approval now lives fully in this desk.</p>
+                </div>
 
-                        <div class="status-footer">
-                                <span
-                                        >{data.reviewStatus === 'approved' ? 'Published desk updated' : 'Pending desk updated'}</span
+                <nav class="sidebar-menu" aria-label="Admin sections">
+                        {#each sidebarMenu as item}
+                                <button
+                                        class:active={activeSection === item.key}
+                                        class="menu-item"
+                                        type="button"
+                                        onclick={() => {
+                                                activeSection = item.key as 'overview' | 'drafts' | 'published';
+                                        }}
                                 >
-                                <span>Workflow already completed</span>
-                        </div>
-                </div>
-        {/if}
-
-        {#if !data.databaseReady}
-                <div class="status-card">
-                        <p class="label">Database setup needed</p>
-                        <p class="value">Add `NEON_DATABASE_URL` to your local `.env` to load the pending review desk.</p>
-                </div>
-        {:else if data.databaseError}
-                <div class="status-card error-card">
-                        <p class="label">Database connection issue</p>
-                        <p class="value">{data.databaseError}</p>
-                </div>
-        {:else if data.articles.length === 0}
-                <div class="status-card">
-                        <p class="label">Desk is clear</p>
-                        <p class="value">No pending stories are waiting for review right now.</p>
-                </div>
-        {:else}
-                <div class="board-overview">
-                        <article class="overview-card lead-card">
-                                <p class="label">Batch readiness</p>
-                                <h3>{data.articles.length} drafts waiting</h3>
-                                <p class="overview-copy">
-                                        Latest arrival {formatDate(latestArrival)}. Keep the morning run moving by clearing the highest-signal stories first.
-                                </p>
-                        </article>
-
-                        <article class="overview-card">
-                                <p class="label">Batch progress</p>
-                                <strong>{reviewedCount}/{data.batchProgress?.total ?? data.articles.length}</strong>
-                                <span>{progressPercent}% reviewed for {data.batchProgress?.scheduledDate ?? 'this run'}</span>
-                        </article>
-
-                        <article class="overview-card">
-                                <p class="label">Urgent watch</p>
-                                <strong>{urgentCount}</strong>
-                                <span>high or extreme priority</span>
-                        </article>
-
-                        <article class="overview-card">
-                                <p class="label">Live lanes</p>
-                                <strong>{activeCategories}</strong>
-                                <span>categories active in this batch</span>
-                        </article>
-
-                        <article class="overview-card">
-                                <p class="label">Workflow mode</p>
-                                <strong>Batch delivered</strong>
-                                <span>review and publishing continue here</span>
-                        </article>
-                </div>
-
-                <div class="risk-summary-panel">
-                        <div class="risk-summary-copy">
-                                <p class="label">Editorial risk summary</p>
-                                <h3>{sourceWatchCount + verificationWatchCount} active review signals</h3>
-                                <p class="overview-copy">
-                                        Use this board to spot drafts that need extra sourcing or verification care before the publish call.
-                                </p>
-                        </div>
-
-                        <div class="risk-summary-grid">
-                                <article class="risk-summary-card source-risk-card">
-                                        <p class="label">Source watch</p>
-                                        <strong>{sourceWatchCount}</strong>
-                                        <span>drafts with missing source details</span>
-                                </article>
-
-                                <article class="risk-summary-card verification-risk-card">
-                                        <p class="label">Verification watch</p>
-                                        <strong>{verificationWatchCount}</strong>
-                                        <span>drafts with unresolved fact-check posture</span>
-                                </article>
-
-                                <article class="risk-summary-card overlap-risk-card">
-                                        <p class="label">Dual watch</p>
-                                        <strong>{dualWatchCount}</strong>
-                                        <span>drafts carrying both source and verification risk</span>
-                                </article>
-                        </div>
-                </div>
-
-                {#if data.batchProgress}
-                        <div class="progress-panel">
-                                <div class="progress-copy">
-                                        <p class="label">Morning run pulse</p>
-                                        <h3>{data.batchProgress.scheduledDate}</h3>
-                                        <p class="overview-copy">
-                                                {data.batchProgress.pending} still waiting, {data.batchProgress.published} published, {data.batchProgress.rejected} rejected.
-                                        </p>
-                                </div>
-
-                                <div class="progress-track" aria-hidden="true">
-                                        <span
-                                                class="progress-segment published-segment"
-                                                style={`width: ${(data.batchProgress.published / data.batchProgress.total) * 100}%`}
-                                        ></span>
-                                        <span
-                                                class="progress-segment rejected-segment"
-                                                style={`width: ${(data.batchProgress.rejected / data.batchProgress.total) * 100}%`}
-                                        ></span>
-                                        <span
-                                                class="progress-segment pending-segment"
-                                                style={`width: ${(data.batchProgress.pending / data.batchProgress.total) * 100}%`}
-                                        ></span>
-                                </div>
-
-                                <div class="progress-legend">
-                                        <span><i class="legend-dot published-dot"></i> Published {data.batchProgress.published}</span>
-                                        <span><i class="legend-dot rejected-dot"></i> Rejected {data.batchProgress.rejected}</span>
-                                        <span><i class="legend-dot pending-dot"></i> Remaining {data.batchProgress.pending}</span>
-                                </div>
-                        </div>
-                {/if}
+                                        <div class="menu-copy">
+                                                <span class="menu-label">{item.label}</span>
+                                                <span class="menu-helper">{item.helper}</span>
+                                        </div>
+                                        <strong>{item.count}</strong>
+                                </button>
+                        {/each}
+                </nav>
 
                 {#if resumeArticle}
-                        <div class="resume-panel">
-                                <div class="resume-copy">
-                                        <p class="label">Resume where you left off</p>
-                                        <h3>{resumeArticle.title_ms}</h3>
-                                        <p class="overview-copy">
-                                                Back in the {formatLabel(resumeArticle.category)} lane. Last touched {formatDate(resumeArticle.updated_at)}.
-                                        </p>
-                                </div>
-
-                                <a class="resume-link" href={resolve('/admin/[id]', { id: resumeArticle.id })}>
-                                        Continue review
+                        <div class="sidebar-panel">
+                                <p class="panel-label">Resume review</p>
+                                <h2>{resumeArticle.title_ms}</h2>
+                                <p>Back in the {formatLabel(resumeArticle.category)} lane. Last touched {formatDate(resumeArticle.updated_at)}.</p>
+                                <a class="sidebar-link" href={resolve('/admin/[id]', { id: resumeArticle.id })}>
+                                        Continue draft
                                 </a>
                         </div>
                 {/if}
 
-                {#if showRecommendedArticle}
-                        {@const recommendedSourceFlags = getSourceQualityFlags(showRecommendedArticle)}
-                        <div class="priority-panel">
-                                <div class="priority-copy">
-                                        <p class="label">Start here</p>
-                                        <h3>{showRecommendedArticle.title_ms}</h3>
-                                        <p class="priority-reason">{buildPriorityReason(showRecommendedArticle)}</p>
-                                        <div class="priority-meta">
-                                                <span>{formatLabel(showRecommendedArticle.category)} lane</span>
-                                                <span>{formatLabel(showRecommendedArticle.hype_level)} priority</span>
-                                                <span>{formatDate(showRecommendedArticle.created_at)}</span>
-                                                {#if showRecommendedArticle.source_url}
-                                                        <span>{formatSourceHost(showRecommendedArticle.source_url)}</span>
-                                                {/if}
-                                                {#if formatSourceFreshness(showRecommendedArticle.source_date)}
-                                                        <span>
-                                                                Source dated
-                                                                {formatSourceFreshness(showRecommendedArticle.source_date)}
-                                                        </span>
-                                                {/if}
-                                        </div>
-                                        {#if recommendedSourceFlags.length > 0}
-                                                <div class="source-flag-row">
-                                                        {#each recommendedSourceFlags as flag}
-                                                                <span class="source-flag">{flag}</span>
-                                                        {/each}
-                                                </div>
-                                        {/if}
-                                </div>
-
-                                <div class="priority-actions">
-                                        <a
-                                                class="priority-link"
-                                                href={resolve('/admin/[id]', { id: showRecommendedArticle.id })}
-                                        >
-                                                Open recommended draft
-                                        </a>
-                                        {#if showRecommendedArticle.source_url}
-                                                <a
-                                                        class="priority-source-link"
-                                                        href={showRecommendedArticle.source_url}
-                                                        target="_blank"
-                                                        rel="noreferrer"
-                                                >
-                                                        Review source
-                                                </a>
-                                        {/if}
+                {#if data.batchProgress}
+                        <div class="sidebar-panel">
+                                <p class="panel-label">Morning run</p>
+                                <h2>{data.batchProgress.scheduledDate}</h2>
+                                <div class="batch-metrics">
+                                        <span>Pending {data.batchProgress.pending}</span>
+                                        <span>Published {data.batchProgress.published}</span>
+                                        <span>Rejected {data.batchProgress.rejected}</span>
                                 </div>
                         </div>
                 {/if}
+        </aside>
 
-                <div class="filter-panel">
-                        <div class="filter-copy">
-                                <p class="label">Queue filters</p>
-                                <p class="filter-text">Use the newsroom lanes to focus the desk. Crime now has its own lane in the morning run.</p>
+        <div class="dashboard-content">
+                <header class="content-header">
+                        <div class="header-copy">
+                                <p class="eyebrow">Admin dashboard</p>
+                                <h2>Newsroom operations at a glance</h2>
+                                <p>
+                                        Track the morning desk, review incoming drafts faster, and keep published output visible without leaving `/admin`.
+                                </p>
                         </div>
 
-                        <div class="filter-row">
-                                {#each filterOptions as option}
+                        {#if data.reviewStatus}
+                                <div class="status-banner success-banner">
+                                        <p class="panel-label">Review updated</p>
+                                        <strong>
+                                                {data.reviewStatus === 'approved'
+                                                        ? 'Article approved and moved to published.'
+                                                        : 'Article rejected and cleared from the pending desk.'}
+                                        </strong>
+                                </div>
+                        {/if}
+                </header>
+
+                {#if !data.databaseReady}
+                        <section class="state-card">
+                                <p class="panel-label">Database setup needed</p>
+                                <h3>Add `NEON_DATABASE_URL` to your local `.env` to load the admin dashboard.</h3>
+                        </section>
+                {:else if data.databaseError}
+                        <section class="state-card error-card">
+                                <p class="panel-label">Database connection issue</p>
+                                <h3>{data.databaseError}</h3>
+                        </section>
+                {:else}
+                        <section class="stats-grid">
+                                {#each draftOverviewCards as card}
+                                        <article class={`stats-card tone-${card.tone}`}>
+                                                <p class="panel-label">{card.label}</p>
+                                                <strong>{card.value}</strong>
+                                                <span>{card.note}</span>
+                                        </article>
+                                {/each}
+                        </section>
+
+                        <section class="section-tabs" aria-label="Dashboard sections">
+                                {#each sidebarMenu as item}
                                         <button
-                                                class:active={activeFilter === option.value}
-                                                class="filter-pill"
+                                                class:active={activeSection === item.key}
+                                                class="section-tab"
                                                 type="button"
                                                 onclick={() => {
-                                                        activeFilter = option.value;
+                                                        activeSection = item.key as 'overview' | 'drafts' | 'published';
                                                 }}
                                         >
-                                                <span>{option.label}</span>
-                                                <strong>{option.count}</strong>
+                                                {item.label}
                                         </button>
                                 {/each}
-                        </div>
-                </div>
+                        </section>
 
-                {#if activeFilter === 'all'}
-                        <div class="triage-board">
-                                {#each triageGroups as group}
-                                        <section class="triage-section">
-                                                <div class="triage-header">
-                                                        <div class="triage-copy">
-                                                                <p class="label">{group.title}</p>
-                                                                <h3>{group.count} story{group.count === 1 ? '' : 'ies'}</h3>
-                                                                <p class="overview-copy">{group.description}</p>
+                        {#if activeSection === 'overview'}
+                                <div class="overview-layout">
+                                        <section class="panel-card">
+                                                <div class="panel-header">
+                                                        <div>
+                                                                <p class="panel-label">Desk signals</p>
+                                                                <h3>Operational watchlist</h3>
                                                         </div>
-                                                        <span class="triage-count">{String(group.count).padStart(2, '0')}</span>
+                                                        <span class="panel-badge">{data.articles.length} active drafts</span>
                                                 </div>
 
-                                                <div class="queue-list">
-                                                        {#each group.articles as article, index (article.id)}
-                                                                {@const sourceFlags = getSourceQualityFlags(article)}
-                                                                {@const verificationFlags = getVerificationFlags(article)}
-                                                                <div
-                                                                        class:source-watch-entry={sourceFlags.length > 0}
-                                                                        class:verification-watch-entry={verificationFlags.length > 0}
-                                                                        class="queue-entry"
-                                                                >
-                                                                        <a
-                                                                                class:source-watch-card={sourceFlags.length > 0}
-                                                                                class:verification-watch-card={verificationFlags.length > 0}
-                                                                                class="queue-card"
-                                                                                href={resolve('/admin/[id]', { id: article.id })}
-                                                                        >
-                                                                                <div class="queue-index">
-                                                                                        <span class="index-label">{group.title}</span>
-                                                                                        <strong>{String(index + 1).padStart(2, '0')}</strong>
-                                                                                </div>
-
-                                                                                <div class="queue-main">
-                                                                                        <div class="card-topline">
-                                                                                                <p class="category">{formatLabel(article.category)}</p>
-                                                                                                <div class="card-chips">
-                                                                                                        {#if sourceFlags.length > 0}
-                                                                                                                <span class="chip source-watch-chip">
-                                                                                                                        {getSourceWatchLabel(sourceFlags.length)}
-                                                                                                                </span>
-                                                                                                        {/if}
-                                                                                                        {#if verificationFlags.length > 0}
-                                                                                                                <span class="chip verification-watch-chip">
-                                                                                                                        {getVerificationWatchLabel(verificationFlags.length)}
-                                                                                                                </span>
-                                                                                                        {/if}
-                                                                                                        <span class="chip verdict-chip">{formatLabel(article.factcheck_verdict)}</span>
-                                                                                                        <span class="chip neutral-chip">{formatLabel(article.region)}</span>
-                                                                                                </div>
-                                                                                        </div>
-
-                                                                                        <div class="title-block">
-                                                                                                <h3>{article.title_ms}</h3>
-                                                                                                {#if article.title_en}
-                                                                                                        <p class="subtitle">{article.title_en}</p>
-                                                                                                {/if}
-                                                                                        </div>
-
-                                                                                        <p class="story-summary">
-                                                                                                {summarizeArticle(article) || 'Open this draft to review the full editorial body.'}
-                                                                                        </p>
-
-                                                                                        <div class="meta-grid">
-                                                                                                <div class="meta-block">
-                                                                                                        <span class="meta-label">Source</span>
-                                                                                                        <strong>{article.source_name ?? 'Unknown source'}</strong>
-                                                                                                </div>
-                                                                                                <div class="meta-block">
-                                                                                                        <span class="meta-label">Received</span>
-                                                                                                        <strong>{formatDate(article.created_at)}</strong>
-                                                                                                </div>
-                                                                                                <div class="meta-block">
-                                                                                                        <span class="meta-label">Slug</span>
-                                                                                                        <strong>{article.slug}</strong>
-                                                                                                </div>
-                                                                                        </div>
-                                                                                </div>
-
-                                                                                <div class="queue-side">
-                                                                                        <span class="priority-badge">{formatLabel(article.hype_level)} priority</span>
-                                                                                        <span class="open-cta">Open draft</span>
-                                                                                </div>
-                                                                        </a>
-
-                                                                        {#if article.source_url || sourceFlags.length > 0}
-                                                                                <div class="queue-context-row">
-                                                                                        <div class="source-context-copy">
-                                                                                                {#if article.source_url}
-                                                                                                        <span class="source-context">
-                                                                                                                Source context: {formatSourceHost(article.source_url)}
-                                                                                                        </span>
-                                                                                                {:else}
-                                                                                                        <span class="source-context">Source context unavailable</span>
-                                                                                                {/if}
-                                                                                                {#if formatSourceFreshness(article.source_date)}
-                                                                                                        <span class="source-freshness">
-                                                                                                                Dated {formatSourceFreshness(article.source_date)}
-                                                                                                        </span>
-                                                                                                {/if}
-                                                                                                {#if sourceFlags.length > 0}
-                                                                                                        <div class="source-flag-row">
-                                                                                                                {#each sourceFlags as flag}
-                                                                                                                        <span class="source-flag">{flag}</span>
-                                                                                                                {/each}
-                                                                                                        </div>
-                                                                                                {/if}
-                                                                                                {#if verificationFlags.length > 0}
-                                                                                                        <div class="verification-flag-row">
-                                                                                                                {#each verificationFlags as flag}
-                                                                                                                        <span class="verification-flag">{flag}</span>
-                                                                                                                {/each}
-                                                                                                        </div>
-                                                                                                {/if}
-                                                                                        </div>
-                                                                                        {#if article.source_url}
-                                                                                                <a
-                                                                                                        class="source-context-link"
-                                                                                                        href={article.source_url}
-                                                                                                        target="_blank"
-                                                                                                        rel="noreferrer"
-                                                                                                >
-                                                                                                        Open original source
-                                                                                                </a>
-                                                                                        {/if}
-                                                                                </div>
-                                                                        {/if}
-                                                                </div>
+                                                <div class="signal-grid">
+                                                        {#each draftDeskSignals as signal}
+                                                                <article class={`signal-card tone-${signal.tone}`}>
+                                                                        <span>{signal.label}</span>
+                                                                        <strong>{signal.value}</strong>
+                                                                </article>
                                                         {/each}
                                                 </div>
                                         </section>
-                                {/each}
-                        </div>
-                {:else}
-                        <div class="queue-list">
-                                {#each filteredArticles as article, index (article.id)}
-                                        {@const sourceFlags = getSourceQualityFlags(article)}
-                                        {@const verificationFlags = getVerificationFlags(article)}
-                                        <div
-                                                class:source-watch-entry={sourceFlags.length > 0}
-                                                class:verification-watch-entry={verificationFlags.length > 0}
-                                                class="queue-entry"
-                                        >
-                                                <a
-                                                        class:source-watch-card={sourceFlags.length > 0}
-                                                        class:verification-watch-card={verificationFlags.length > 0}
-                                                        class="queue-card"
-                                                        href={resolve('/admin/[id]', { id: article.id })}
-                                                >
-                                                        <div class="queue-index">
-                                                                <span class="index-label">Queue</span>
-                                                                <strong>{String(index + 1).padStart(2, '0')}</strong>
+
+                                        <section class="panel-card">
+                                                <div class="panel-header">
+                                                        <div>
+                                                                <p class="panel-label">Batch pulse</p>
+                                                                <h3>Morning run progress</h3>
+                                                        </div>
+                                                        <span class="panel-badge">{progressPercent}% reviewed</span>
+                                                </div>
+
+                                                {#if data.batchProgress}
+                                                        <div class="progress-track" aria-hidden="true">
+                                                                <span
+                                                                        class="progress-segment published-segment"
+                                                                        style={`width: ${(data.batchProgress.published / data.batchProgress.total) * 100}%`}
+                                                                ></span>
+                                                                <span
+                                                                        class="progress-segment rejected-segment"
+                                                                        style={`width: ${(data.batchProgress.rejected / data.batchProgress.total) * 100}%`}
+                                                                ></span>
+                                                                <span
+                                                                        class="progress-segment pending-segment"
+                                                                        style={`width: ${(data.batchProgress.pending / data.batchProgress.total) * 100}%`}
+                                                                ></span>
                                                         </div>
 
-                                                        <div class="queue-main">
-                                                                <div class="card-topline">
-                                                                        <p class="category">{formatLabel(article.category)}</p>
-                                                                        <div class="card-chips">
-                                                                                {#if sourceFlags.length > 0}
-                                                                                        <span class="chip source-watch-chip">
-                                                                                                {getSourceWatchLabel(sourceFlags.length)}
-                                                                                        </span>
-                                                                                {/if}
-                                                                                {#if verificationFlags.length > 0}
-                                                                                        <span class="chip verification-watch-chip">
-                                                                                                {getVerificationWatchLabel(verificationFlags.length)}
-                                                                                        </span>
-                                                                                {/if}
-                                                                                <span class="chip verdict-chip">{formatLabel(article.factcheck_verdict)}</span>
-                                                                                <span class="chip neutral-chip">{formatLabel(article.region)}</span>
-                                                                        </div>
-                                                                </div>
-
-                                                                <div class="title-block">
-                                                                        <h3>{article.title_ms}</h3>
-                                                                        {#if article.title_en}
-                                                                                <p class="subtitle">{article.title_en}</p>
-                                                                        {/if}
-                                                                </div>
-
-                                                                <p class="story-summary">{summarizeArticle(article) || 'Open this draft to review the full editorial body.'}</p>
-
-                                                                <div class="meta-grid">
-                                                                        <div class="meta-block">
-                                                                                <span class="meta-label">Source</span>
-                                                                                <strong>{article.source_name ?? 'Unknown source'}</strong>
-                                                                        </div>
-                                                                        <div class="meta-block">
-                                                                                <span class="meta-label">Received</span>
-                                                                                <strong>{formatDate(article.created_at)}</strong>
-                                                                        </div>
-                                                                        <div class="meta-block">
-                                                                                <span class="meta-label">Slug</span>
-                                                                                <strong>{article.slug}</strong>
-                                                                        </div>
-                                                                </div>
+                                                        <div class="summary-grid">
+                                                                <article>
+                                                                        <span class="panel-label">Scheduled date</span>
+                                                                        <strong>{data.batchProgress.scheduledDate}</strong>
+                                                                </article>
+                                                                <article>
+                                                                        <span class="panel-label">Pending</span>
+                                                                        <strong>{data.batchProgress.pending}</strong>
+                                                                </article>
+                                                                <article>
+                                                                        <span class="panel-label">Published</span>
+                                                                        <strong>{data.batchProgress.published}</strong>
+                                                                </article>
+                                                                <article>
+                                                                        <span class="panel-label">Rejected</span>
+                                                                        <strong>{data.batchProgress.rejected}</strong>
+                                                                </article>
                                                         </div>
-
-                                                        <div class="queue-side">
-                                                                <span class="priority-badge">{formatLabel(article.hype_level)} priority</span>
-                                                                <span class="open-cta">Open draft</span>
-                                                        </div>
-                                                </a>
-
-                                                {#if article.source_url || sourceFlags.length > 0}
-                                                        <div class="queue-context-row">
-                                                                <div class="source-context-copy">
-                                                                        {#if article.source_url}
-                                                                                <span class="source-context">
-                                                                                        Source context: {formatSourceHost(article.source_url)}
-                                                                                </span>
-                                                                        {:else}
-                                                                                <span class="source-context">Source context unavailable</span>
-                                                                        {/if}
-                                                                        {#if formatSourceFreshness(article.source_date)}
-                                                                                <span class="source-freshness">
-                                                                                        Dated {formatSourceFreshness(article.source_date)}
-                                                                                </span>
-                                                                        {/if}
-                                                                        {#if sourceFlags.length > 0}
-                                                                                <div class="source-flag-row">
-                                                                                        {#each sourceFlags as flag}
-                                                                                                <span class="source-flag">{flag}</span>
-                                                                                        {/each}
-                                                                                </div>
-                                                                        {/if}
-                                                                        {#if verificationFlags.length > 0}
-                                                                                <div class="verification-flag-row">
-                                                                                        {#each verificationFlags as flag}
-                                                                                                <span class="verification-flag">{flag}</span>
-                                                                                        {/each}
-                                                                                </div>
-                                                                        {/if}
-                                                                </div>
-                                                                {#if article.source_url}
-                                                                        <a
-                                                                                class="source-context-link"
-                                                                                href={article.source_url}
-                                                                                target="_blank"
-                                                                                rel="noreferrer"
-                                                                        >
-                                                                                Open original source
-                                                                        </a>
-                                                                {/if}
-                                                        </div>
+                                                {:else}
+                                                        <p class="empty-copy">No morning batch progress is available yet.</p>
                                                 {/if}
+                                        </section>
+                                </div>
+
+                                <section class="panel-card">
+                                        <div class="panel-header">
+                                                <div>
+                                                        <p class="panel-label">Draft queue snapshot</p>
+                                                        <h3>Top pending stories</h3>
+                                                </div>
+                                                <button
+                                                        class="text-link"
+                                                        type="button"
+                                                        onclick={() => {
+                                                                activeSection = 'drafts';
+                                                        }}
+                                                >
+                                                        Open draft queue
+                                                </button>
                                         </div>
-                                {/each}
-                        </div>
+
+                                        {#if data.articles.length === 0}
+                                                <p class="empty-copy">No pending stories are waiting for review right now.</p>
+                                        {:else}
+                                                <div class="table-shell">
+                                                        <table class="article-table">
+                                                                <thead>
+                                                                        <tr>
+                                                                                <th>Story</th>
+                                                                                <th>Category</th>
+                                                                                <th>Region</th>
+                                                                                <th>Studio</th>
+                                                                                <th>Risk</th>
+                                                                                <th>Updated</th>
+                                                                                <th>Action</th>
+                                                                        </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                        {#each data.articles.slice(0, 6) as article (article.id)}
+                                                                                {@const sourceFlags = getSourceQualityFlags(article)}
+                                                                                {@const verificationFlags = getVerificationFlags(article)}
+                                                                                {@const studioFlags = getStudioFlags(article)}
+                                                                                <tr>
+                                                                                        <td>
+                                                                                                <div class="story-cell">
+                                                                                                        <strong>{article.title_ms}</strong>
+                                                                                                        <span>{summarizeArticle(article) || 'Open this draft to review the full editorial body.'}</span>
+                                                                                                </div>
+                                                                                        </td>
+                                                                                        <td>{formatLabel(article.category)}</td>
+                                                                                        <td>{formatLabel(article.region)}</td>
+                                                                                        <td>
+                                                                                                <div class="stacked-cell">
+                                                                                                        <strong>{article.form ? formatLabel(article.form) : 'Studio form pending'}</strong>
+                                                                                                        <span>{summarizeStudioText(article.why_viral, 'No viral rationale stored yet.')}</span>
+                                                                                                        {#if article.sensitivity_notes}
+                                                                                                                <small class="studio-note">
+                                                                                                                        {summarizeStudioText(article.sensitivity_notes, '', 72)}
+                                                                                                                </small>
+                                                                                                        {/if}
+                                                                                                        {#if studioFlags.length > 0}
+                                                                                                                <div class="tag-row">
+                                                                                                                        {#each studioFlags as flag}
+                                                                                                                                <span class={`table-tag ${flag.tone}`}>{flag.label}</span>
+                                                                                                                        {/each}
+                                                                                                                </div>
+                                                                                                        {/if}
+                                                                                                </div>
+                                                                                        </td>
+                                                                                        <td>
+                                                                                                <div class="tag-row">
+                                                                                                        {#if sourceFlags.length > 0}
+                                                                                                                <span class="table-tag warn-tag">{sourceFlags.length} source</span>
+                                                                                                        {/if}
+                                                                                                        {#if verificationFlags.length > 0}
+                                                                                                                <span class="table-tag info-tag">{verificationFlags.length} verify</span>
+                                                                                                        {/if}
+                                                                                                        {#if sourceFlags.length === 0 && verificationFlags.length === 0}
+                                                                                                                <span class="table-tag neutral-tag">Clean</span>
+                                                                                                        {/if}
+                                                                                                </div>
+                                                                                        </td>
+                                                                                        <td>{formatDate(article.updated_at)}</td>
+                                                                                        <td>
+                                                                                                <a class="row-link" href={resolve('/admin/[id]', { id: article.id })}>
+                                                                                                        Open
+                                                                                                </a>
+                                                                                        </td>
+                                                                                </tr>
+                                                                        {/each}
+                                                                </tbody>
+                                                        </table>
+                                                </div>
+                                        {/if}
+                                </section>
+                        {/if}
+
+                        {#if activeSection === 'drafts'}
+                                <section class="panel-card">
+                                        <div class="panel-header stacked-mobile">
+                                                <div>
+                                                        <p class="panel-label">Draft queue</p>
+                                                        <h3>Pending newsroom rows</h3>
+                                                </div>
+
+                                                <div class="filter-group">
+                                                        {#each draftFilterOptions as option}
+                                                                <button
+                                                                        class:active={draftFilter === option.value}
+                                                                        class="filter-pill"
+                                                                        type="button"
+                                                                        onclick={() => {
+                                                                                draftFilter = option.value;
+                                                                        }}
+                                                                >
+                                                                        <span>{option.label}</span>
+                                                                        <strong>{option.count}</strong>
+                                                                </button>
+                                                        {/each}
+                                                </div>
+                                        </div>
+
+                                        {#if filteredDrafts.length === 0}
+                                                <p class="empty-copy">No drafts match this filter right now.</p>
+                                        {:else}
+                                                <div class="table-shell">
+                                                        <table class="article-table">
+                                                                <thead>
+                                                                        <tr>
+                                                                                <th>Story</th>
+                                                                                <th>Category</th>
+                                                                                <th>Source</th>
+                                                                                <th>Fact check</th>
+                                                                                <th>Studio</th>
+                                                                                <th>Priority</th>
+                                                                                <th>Updated</th>
+                                                                                <th>Action</th>
+                                                                        </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                        {#each filteredDrafts as article (article.id)}
+                                                                                {@const sourceFlags = getSourceQualityFlags(article)}
+                                                                                {@const verificationFlags = getVerificationFlags(article)}
+                                                                                {@const studioFlags = getStudioFlags(article)}
+                                                                                <tr>
+                                                                                        <td>
+                                                                                                <div class="story-cell">
+                                                                                                        <strong>{article.title_ms}</strong>
+                                                                                                        {#if article.title_en}
+                                                                                                                <small>{article.title_en}</small>
+                                                                                                        {/if}
+                                                                                                        <span>{summarizeArticle(article) || 'Open this draft to review the full editorial body.'}</span>
+                                                                                                        <div class="story-meta-row">
+                                                                                                                <span>{article.slug}</span>
+                                                                                                                <span>{formatLabel(article.region)}</span>
+                                                                                                        </div>
+                                                                                                </div>
+                                                                                        </td>
+                                                                                        <td>{formatLabel(article.category)}</td>
+                                                                                        <td>
+                                                                                                <div class="stacked-cell">
+                                                                                                        <strong>{article.source_name ?? 'Source unavailable'}</strong>
+                                                                                                        <span>{formatSourceHost(article.source_url)}</span>
+                                                                                                        <div class="tag-row">
+                                                                                                                {#each sourceFlags as flag}
+                                                                                                                        <span class="table-tag warn-tag">{flag}</span>
+                                                                                                                {/each}
+                                                                                                        </div>
+                                                                                                </div>
+                                                                                        </td>
+                                                                                        <td>
+                                                                                                <div class="stacked-cell">
+                                                                                                        <strong>{formatLabel(article.factcheck_verdict)}</strong>
+                                                                                                        <span>{article.factcheck_confidence}% confidence</span>
+                                                                                                        <div class="tag-row">
+                                                                                                                {#each verificationFlags as flag}
+                                                                                                                        <span class="table-tag info-tag">{flag}</span>
+                                                                                                                {/each}
+                                                                                                        </div>
+                                                                                                </div>
+                                                                                        </td>
+                                                                                        <td>
+                                                                                                <div class="stacked-cell">
+                                                                                                        <strong>{article.form ? formatLabel(article.form) : 'Studio form pending'}</strong>
+                                                                                                        <span>{summarizeStudioText(article.why_viral, 'No viral rationale stored yet.')}</span>
+                                                                                                        {#if article.sensitivity_notes}
+                                                                                                                <small class="studio-note">
+                                                                                                                        {summarizeStudioText(article.sensitivity_notes, '', 72)}
+                                                                                                                </small>
+                                                                                                        {/if}
+                                                                                                        {#if studioFlags.length > 0}
+                                                                                                                <div class="tag-row">
+                                                                                                                        {#each studioFlags as flag}
+                                                                                                                                <span class={`table-tag ${flag.tone}`}>{flag.label}</span>
+                                                                                                                        {/each}
+                                                                                                                </div>
+                                                                                                        {/if}
+                                                                                                </div>
+                                                                                        </td>
+                                                                                        <td>{formatLabel(article.hype_level)}</td>
+                                                                                        <td>{formatDate(article.updated_at)}</td>
+                                                                                        <td>
+                                                                                                <a class="row-link" href={resolve('/admin/[id]', { id: article.id })}>
+                                                                                                        Review
+                                                                                                </a>
+                                                                                        </td>
+                                                                                </tr>
+                                                                        {/each}
+                                                                </tbody>
+                                                        </table>
+                                                </div>
+                                        {/if}
+                                </section>
+                        {/if}
+
+                        {#if activeSection === 'published'}
+                                <section class="panel-card">
+                                        <div class="panel-header stacked-mobile">
+                                                <div>
+                                                        <p class="panel-label">Published desk</p>
+                                                        <h3>Recently published articles</h3>
+                                                </div>
+
+                                                <div class="filter-group">
+                                                        {#each publishedFilterOptions as option}
+                                                                <button
+                                                                        class:active={publishedFilter === option.value}
+                                                                        class="filter-pill"
+                                                                        type="button"
+                                                                        onclick={() => {
+                                                                                publishedFilter = option.value;
+                                                                        }}
+                                                                >
+                                                                        <span>{option.label}</span>
+                                                                        <strong>{option.count}</strong>
+                                                                </button>
+                                                        {/each}
+                                                </div>
+                                        </div>
+
+                                        {#if filteredPublished.length === 0}
+                                                <p class="empty-copy">No published articles match this filter right now.</p>
+                                        {:else}
+                                                <div class="table-shell">
+                                                        <table class="article-table">
+                                                                <thead>
+                                                                        <tr>
+                                                                                <th>Story</th>
+                                                                                <th>Category</th>
+                                                                                <th>Published</th>
+                                                                                <th>Source</th>
+                                                                                <th>Verdict</th>
+                                                                                <th>Article</th>
+                                                                        </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                        {#each filteredPublished as article (article.id)}
+                                                                                <tr>
+                                                                                        <td>
+                                                                                                <div class="story-cell">
+                                                                                                        <strong>{article.title_ms}</strong>
+                                                                                                        {#if article.title_en}
+                                                                                                                <small>{article.title_en}</small>
+                                                                                                        {/if}
+                                                                                                        <span>{summarizeArticle(article) || 'Published article overview unavailable.'}</span>
+                                                                                                </div>
+                                                                                        </td>
+                                                                                        <td>{formatLabel(article.category)}</td>
+                                                                                        <td>{formatCompactDate(article.published_at ?? article.created_at)}</td>
+                                                                                        <td>
+                                                                                                <div class="stacked-cell">
+                                                                                                        <strong>{article.source_name ?? 'Source unavailable'}</strong>
+                                                                                                        <span>{formatSourceHost(article.source_url)}</span>
+                                                                                                </div>
+                                                                                        </td>
+                                                                                        <td>
+                                                                                                <span class="table-tag neutral-tag">{formatLabel(article.factcheck_verdict)}</span>
+                                                                                        </td>
+                                                                                        <td>
+                                                                                                <a class="row-link" href={resolve(`/article/${article.slug}`)}>
+                                                                                                        Open
+                                                                                                </a>
+                                                                                        </td>
+                                                                                </tr>
+                                                                        {/each}
+                                                                </tbody>
+                                                        </table>
+                                                </div>
+                                        {/if}
+                                </section>
+                        {/if}
                 {/if}
-        {/if}
+        </div>
 </section>
 
 <style>
-        .desk-shell {
-                display: grid;
-                gap: 1.2rem;
+        :global(body) {
+                background:
+                        radial-gradient(circle at top left, rgba(167, 243, 208, 0.18), transparent 28%),
+                        radial-gradient(circle at top right, rgba(125, 211, 252, 0.14), transparent 24%),
+                        linear-gradient(180deg, #f4f7fb 0%, #edf2f7 100%);
         }
 
-        .header-copy,
-        .filter-copy {
+        .dashboard-shell {
+                display: grid;
+                grid-template-columns: minmax(250px, 290px) minmax(0, 1fr);
+                min-height: calc(100vh - 7rem);
+                width: 100%;
+                min-width: 0;
+                border: 1px solid rgba(148, 163, 184, 0.2);
+                border-radius: 1.75rem;
+                overflow: hidden;
+                background: rgba(255, 255, 255, 0.76);
+                box-shadow: 0 28px 80px rgba(15, 23, 42, 0.12);
+                backdrop-filter: blur(18px);
+        }
+
+        .dashboard-sidebar {
+                display: grid;
+                align-content: start;
+                gap: 1.25rem;
+                padding: 1.5rem;
+                background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+                color: #e2e8f0;
+        }
+
+        .sidebar-brand,
+        .sidebar-panel,
+        .menu-item,
+        .panel-card,
+        .state-card,
+        .stats-card,
+        .status-banner,
+        .signal-card {
+                border-radius: 1.25rem;
+        }
+
+        .sidebar-brand,
+        .sidebar-panel {
+                display: grid;
+                gap: 0.55rem;
+                padding: 1.15rem;
+                background: rgba(15, 23, 42, 0.52);
+                border: 1px solid rgba(148, 163, 184, 0.18);
+        }
+
+        .sidebar-copy,
+        .sidebar-panel p,
+        .menu-helper {
+                color: rgba(226, 232, 240, 0.78);
+                line-height: 1.6;
+        }
+
+        .sidebar-menu {
+                display: grid;
+                gap: 0.7rem;
+        }
+
+        .menu-item {
+                display: flex;
+                justify-content: space-between;
+                gap: 0.8rem;
+                align-items: flex-start;
+                width: 100%;
+                padding: 0.95rem 1rem;
+                border: 1px solid rgba(148, 163, 184, 0.16);
+                background: rgba(15, 23, 42, 0.28);
+                color: #f8fafc;
+                text-align: left;
+                cursor: pointer;
+                transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+        }
+
+        .menu-item:hover,
+        .menu-item.active {
+                transform: translateX(4px);
+                background: linear-gradient(135deg, rgba(30, 41, 59, 0.94), rgba(15, 23, 42, 0.98));
+                border-color: rgba(125, 211, 252, 0.38);
+        }
+
+        .menu-copy {
+                display: grid;
+                gap: 0.28rem;
+        }
+
+        .menu-label {
+                font-weight: 700;
+                letter-spacing: 0.01em;
+        }
+
+        .sidebar-link,
+        .row-link,
+        .text-link {
+                color: #0f766e;
+                font-weight: 700;
+                text-decoration: none;
+        }
+
+        .sidebar-link {
+                color: #7dd3fc;
+        }
+
+        .batch-metrics {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.6rem;
+                font-size: 0.92rem;
+                color: #cbd5e1;
+        }
+
+        .dashboard-content {
+                display: grid;
+                gap: 1.15rem;
+                padding: 1.4rem;
+                min-width: 0;
+        }
+
+        .content-header {
+                display: flex;
+                justify-content: space-between;
+                gap: 1rem;
+                align-items: flex-start;
+        }
+
+        .header-copy {
                 display: grid;
                 gap: 0.45rem;
         }
 
         .eyebrow,
-        .category,
-        .label,
-        .meta-label,
-        .index-label {
-                font-size: 0.78rem;
+        .panel-label {
+                margin: 0;
+                font-size: 0.76rem;
+                font-weight: 800;
+                text-transform: uppercase;
+                letter-spacing: 0.1em;
+                color: #64748b;
+        }
+
+        h1,
+        h2,
+        h3,
+        p,
+        strong,
+        span,
+        small {
+                margin: 0;
+        }
+
+        h1,
+        h2,
+        h3 {
+                color: #0f172a;
+                line-height: 1.05;
+        }
+
+        .dashboard-sidebar h1,
+        .dashboard-sidebar h2 {
+                color: #f8fafc;
+        }
+
+        .content-header h2 {
+                font-size: clamp(2rem, 3.4vw, 3rem);
+                text-wrap: balance;
+        }
+
+        .content-header p:last-child {
+                color: #475569;
+                max-width: 56rem;
+                line-height: 1.7;
+        }
+
+        .status-banner,
+        .state-card,
+        .panel-card,
+        .stats-card {
+                border: 1px solid rgba(148, 163, 184, 0.2);
+                background: rgba(255, 255, 255, 0.88);
+                box-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+        }
+
+        .status-banner,
+        .state-card,
+        .panel-card {
+                padding: 1.2rem;
+        }
+
+        .success-banner {
+                min-width: 18rem;
+                background: linear-gradient(180deg, rgba(240, 253, 244, 0.94), rgba(255, 255, 255, 0.94));
+                border-color: rgba(74, 222, 128, 0.35);
+        }
+
+        .error-card {
+                border-color: rgba(248, 113, 113, 0.35);
+                background: linear-gradient(180deg, rgba(254, 242, 242, 0.96), rgba(255, 255, 255, 0.94));
+        }
+
+        .stats-grid {
+                display: grid;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                gap: 1rem;
+        }
+
+        .stats-card {
+                display: grid;
+                gap: 0.45rem;
+                padding: 1.15rem;
+        }
+
+        .stats-card strong,
+        .signal-card strong {
+                font-size: clamp(1.8rem, 2.4vw, 2.3rem);
+                line-height: 1;
+                color: #0f172a;
+        }
+
+        .stats-card span,
+        .signal-card span,
+        .empty-copy {
+                color: #475569;
+                line-height: 1.6;
+        }
+
+        .tone-green {
+                background: linear-gradient(180deg, rgba(236, 253, 245, 0.98), rgba(255, 255, 255, 0.95));
+        }
+
+        .tone-blue {
+                background: linear-gradient(180deg, rgba(239, 246, 255, 0.98), rgba(255, 255, 255, 0.95));
+        }
+
+        .tone-violet {
+                background: linear-gradient(180deg, rgba(245, 243, 255, 0.98), rgba(255, 255, 255, 0.95));
+        }
+
+        .tone-warm {
+                background: linear-gradient(180deg, rgba(255, 247, 237, 0.98), rgba(255, 255, 255, 0.95));
+        }
+
+        .tone-rose {
+                background: linear-gradient(180deg, rgba(255, 241, 242, 0.98), rgba(255, 255, 255, 0.95));
+        }
+
+        .tone-amber {
+                background: linear-gradient(180deg, rgba(255, 251, 235, 0.98), rgba(255, 255, 255, 0.95));
+        }
+
+        .section-tabs {
+                display: none;
+                gap: 0.7rem;
+                flex-wrap: wrap;
+        }
+
+        .section-tab,
+        .filter-pill,
+        .text-link {
+                border: 1px solid rgba(148, 163, 184, 0.24);
+                background: rgba(255, 255, 255, 0.78);
+                cursor: pointer;
+        }
+
+        .section-tab,
+        .filter-pill {
+                padding: 0.75rem 0.95rem;
+                border-radius: 999px;
+                color: #334155;
+                font-weight: 700;
+                transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+        }
+
+        .section-tab.active,
+        .filter-pill.active {
+                background: #0f172a;
+                border-color: #0f172a;
+                color: #f8fafc;
+        }
+
+        .overview-layout {
+                display: grid;
+                grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.95fr);
+                gap: 1rem;
+        }
+
+        .panel-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                gap: 1rem;
+                margin-bottom: 1rem;
+        }
+
+        .panel-card {
+                min-width: 0;
+        }
+
+        .panel-badge {
+                padding: 0.45rem 0.75rem;
+                border-radius: 999px;
+                background: rgba(15, 23, 42, 0.06);
+                color: #334155;
+                font-size: 0.88rem;
+                font-weight: 700;
+        }
+
+        .signal-grid,
+        .summary-grid {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 0.8rem;
+        }
+
+        .signal-card {
+                display: grid;
+                gap: 0.35rem;
+                padding: 1rem;
+                border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .progress-track {
+                display: flex;
+                gap: 0.35rem;
+                width: 100%;
+                height: 0.95rem;
+                margin-bottom: 1rem;
+        }
+
+        .progress-segment {
+                border-radius: 999px;
+        }
+
+        .published-segment {
+                background: linear-gradient(90deg, #14b8a6, #34d399);
+        }
+
+        .rejected-segment {
+                background: linear-gradient(90deg, #f97316, #fb7185);
+        }
+
+        .pending-segment {
+                background: linear-gradient(90deg, #cbd5e1, #94a3b8);
+        }
+
+        .summary-grid article {
+                display: grid;
+                gap: 0.25rem;
+                padding: 0.9rem;
+                border-radius: 1rem;
+                background: rgba(248, 250, 252, 0.88);
+                border: 1px solid rgba(148, 163, 184, 0.18);
+        }
+
+        .summary-grid strong {
+                font-size: 1.25rem;
+        }
+
+        .filter-group,
+        .tag-row,
+        .story-meta-row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+        }
+
+        .table-shell {
+                overflow-x: auto;
+                max-width: 100%;
+        }
+
+        .article-table {
+                width: 100%;
+                border-collapse: collapse;
+                min-width: 1120px;
+        }
+
+        .article-table th,
+        .article-table td {
+                padding: 0.95rem 0.9rem;
+                border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+                vertical-align: top;
+                text-align: left;
+        }
+
+        .article-table th {
+                font-size: 0.76rem;
                 font-weight: 800;
                 text-transform: uppercase;
                 letter-spacing: 0.08em;
                 color: #64748b;
         }
 
-        h2,
-        h3,
-        p {
-                margin: 0;
+        .story-cell,
+        .stacked-cell {
+                display: grid;
+                gap: 0.32rem;
         }
 
-        h2 {
-                font-size: clamp(2rem, 4vw, 2.8rem);
-                line-height: 1.05;
+        .story-cell strong,
+        .stacked-cell strong {
                 color: #0f172a;
-                text-wrap: balance;
+                font-size: 0.98rem;
         }
 
-        .header-copy p:last-child {
-                max-width: 52rem;
-                color: #475569;
-                line-height: 1.7;
-        }
-
-        .status-card,
-        .overview-card,
-        .progress-panel,
-        .resume-panel,
-        .filter-panel,
-        .queue-card {
-                border: 1px solid #dbe4f0;
-                border-radius: 1.2rem;
-                background:
-                        linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 252, 0.97)),
-                        #ffffff;
-                box-shadow: 0 16px 40px rgba(15, 23, 42, 0.07);
-        }
-
-        .status-card,
-        .progress-panel,
-        .resume-panel,
-        .priority-panel,
-        .filter-panel {
-                padding: 1.3rem;
-        }
-
-        .error-card {
-                border-color: #fecaca;
-                background: #fff7f7;
-        }
-
-        .success-card {
-                border-color: #bbf7d0;
-                background: #f0fdf4;
-        }
-
-        .value {
-                margin-top: 0.45rem;
-                font-size: 1.02rem;
-                font-weight: 600;
-                color: #0f172a;
-        }
-
-        .note {
-                margin-top: 0.6rem;
-                color: #166534;
-        }
-
-        .status-footer {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 0.75rem 1rem;
-                margin-top: 0.9rem;
-                padding-top: 0.9rem;
-                border-top: 1px solid rgba(148, 163, 184, 0.22);
-                color: #475569;
-                font-size: 0.88rem;
-                font-weight: 600;
-        }
-
-        .board-overview {
-                display: grid;
-                grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr));
-                gap: 1rem;
-        }
-
-        .progress-panel,
-        .progress-copy,
-        .progress-legend {
-                display: grid;
-                gap: 0.8rem;
-        }
-
-        .risk-summary-panel,
-        .risk-summary-grid {
-                display: grid;
-                gap: 0.9rem;
-        }
-
-        .risk-summary-panel {
-                padding: 1.2rem 1.3rem;
-                border: 1px solid #dbe4f0;
-                border-radius: 1.2rem;
-                background:
-                        linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 252, 0.97)),
-                        #ffffff;
-                box-shadow: 0 16px 40px rgba(15, 23, 42, 0.07);
-        }
-
-        .risk-summary-copy {
-                display: grid;
-                gap: 0.38rem;
-        }
-
-        .risk-summary-grid {
-                grid-template-columns: repeat(3, minmax(0, 1fr));
-        }
-
-        .risk-summary-card {
-                display: grid;
-                gap: 0.35rem;
-                padding: 1rem;
-                border-radius: 1rem;
-                border: 1px solid #dbe4f0;
-                background: rgba(255, 255, 255, 0.92);
-        }
-
-        .risk-summary-card strong {
-                font-size: 1.45rem;
-                line-height: 1.05;
-                color: #0f172a;
-        }
-
-        .risk-summary-card span {
+        .story-cell span,
+        .stacked-cell span,
+        .story-cell small,
+        .story-meta-row {
                 color: #475569;
                 line-height: 1.55;
         }
 
-        .source-risk-card {
-                border-color: #fdba74;
-                background: linear-gradient(180deg, rgba(255, 247, 237, 0.92), rgba(255, 255, 255, 0.98));
-        }
-
-        .verification-risk-card {
-                border-color: #93c5fd;
-                background: linear-gradient(180deg, rgba(239, 246, 255, 0.92), rgba(255, 255, 255, 0.98));
-        }
-
-        .overlap-risk-card {
-                border-color: #c4b5fd;
-                background: linear-gradient(180deg, rgba(245, 243, 255, 0.92), rgba(255, 255, 255, 0.98));
-        }
-
-        .resume-panel {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 1rem;
-                border-color: #cbd5e1;
-                background:
-                        linear-gradient(135deg, rgba(255, 255, 255, 0.99), rgba(239, 246, 255, 0.95)),
-                        #ffffff;
-        }
-
-        .priority-panel {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 1rem;
-                border-color: rgba(99, 102, 241, 0.24);
-                background:
-                        linear-gradient(135deg, rgba(238, 242, 255, 0.98), rgba(255, 255, 255, 0.98)),
-                        #ffffff;
-        }
-
-        .resume-copy {
-                display: grid;
-                gap: 0.4rem;
-        }
-
-        .priority-copy {
-                display: grid;
-                gap: 0.45rem;
-        }
-
-        .priority-actions {
-                display: grid;
-                gap: 0.6rem;
-                justify-items: end;
-        }
-
-        .priority-reason {
-                color: #334155;
-                line-height: 1.6;
-        }
-
-        .priority-meta {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 0.55rem 0.85rem;
-                color: #475569;
+        .story-cell small {
                 font-size: 0.88rem;
+        }
+
+        .studio-note {
+                font-size: 0.82rem;
+        }
+
+        .story-meta-row {
+                font-size: 0.82rem;
+        }
+
+        .table-tag {
+                display: inline-flex;
+                align-items: center;
+                padding: 0.28rem 0.55rem;
+                border-radius: 999px;
+                font-size: 0.75rem;
                 font-weight: 700;
         }
 
-        .priority-link {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                min-width: 13rem;
-                border-radius: 999px;
-                background: #312e81;
-                color: #eef2ff;
-                padding: 0.85rem 1.15rem;
-                font-weight: 800;
-                text-decoration: none;
-                transition:
-                        transform 160ms ease,
-                        box-shadow 160ms ease,
-                        background 160ms ease;
-                box-shadow: 0 16px 32px rgba(49, 46, 129, 0.18);
-        }
-
-        .priority-link:hover {
-                transform: translateY(-1px);
-                background: #3730a3;
-                box-shadow: 0 18px 36px rgba(49, 46, 129, 0.22);
-        }
-
-        .priority-source-link {
-                color: #3730a3;
-                font-size: 0.9rem;
-                font-weight: 700;
-                text-decoration: none;
-        }
-
-        .priority-source-link:hover {
-                text-decoration: underline;
-        }
-
-        .resume-link {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                min-width: 10rem;
-                border-radius: 999px;
-                background: #0f172a;
-                color: #f8fafc;
-                padding: 0.85rem 1.15rem;
-                font-weight: 800;
-                text-decoration: none;
-                transition:
-                        transform 160ms ease,
-                        box-shadow 160ms ease;
-                box-shadow: 0 14px 28px rgba(15, 23, 42, 0.14);
-        }
-
-        .resume-link:hover {
-                transform: translateY(-1px);
-                box-shadow: 0 18px 34px rgba(15, 23, 42, 0.18);
-        }
-
-        .progress-track {
-                display: flex;
-                overflow: hidden;
-                min-height: 0.8rem;
-                border-radius: 999px;
-                background: #e2e8f0;
-        }
-
-        .progress-segment {
-                display: block;
-                height: 0.8rem;
-        }
-
-        .published-segment,
-        .published-dot {
-                background: #0f766e;
-        }
-
-        .rejected-segment,
-        .rejected-dot {
-                background: #b45309;
-        }
-
-        .pending-segment,
-        .pending-dot {
-                background: #6366f1;
-        }
-
-        .progress-legend {
-                grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-                color: #475569;
-                font-size: 0.9rem;
-                font-weight: 600;
-        }
-
-        .progress-legend span {
-                display: inline-flex;
-                align-items: center;
-                gap: 0.55rem;
-        }
-
-        .legend-dot {
-                display: inline-flex;
-                width: 0.7rem;
-                height: 0.7rem;
-                border-radius: 999px;
-        }
-
-        .overview-card {
-                display: grid;
-                gap: 0.45rem;
-                padding: 1.2rem;
-        }
-
-        .lead-card {
-                background:
-                        linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.94)),
-                        #0f172a;
-                border-color: rgba(30, 41, 59, 0.85);
-        }
-
-        .lead-card .label,
-        .lead-card .overview-copy {
-                color: rgba(226, 232, 240, 0.82);
-        }
-
-        .lead-card h3 {
-                color: #f8fafc;
-                font-size: 1.5rem;
-                line-height: 1.1;
-        }
-
-        .overview-card strong {
-                font-size: 1.5rem;
-                line-height: 1.1;
-                color: #0f172a;
-        }
-
-        .overview-card span,
-        .overview-copy,
-        .filter-text {
-                color: #475569;
-                line-height: 1.6;
-        }
-
-        .filter-panel {
-                display: grid;
-                gap: 1rem;
-        }
-
-        .filter-row {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 0.65rem;
-        }
-
-        .filter-pill {
-                display: inline-flex;
-                align-items: center;
-                gap: 0.7rem;
-                border: 1px solid #dbe4f0;
-                border-radius: 999px;
-                background: #ffffff;
-                padding: 0.7rem 0.95rem;
-                color: #334155;
-                font: inherit;
-                font-weight: 700;
-                cursor: pointer;
-                transition:
-                        transform 160ms ease,
-                        border-color 160ms ease,
-                        box-shadow 160ms ease,
-                        background 160ms ease;
-        }
-
-        .filter-pill strong {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                min-width: 1.75rem;
-                height: 1.75rem;
-                border-radius: 999px;
-                background: #e2e8f0;
-                color: #0f172a;
-                font-size: 0.8rem;
-        }
-
-        .filter-pill:hover,
-        .filter-pill.active {
-                transform: translateY(-2px);
-                border-color: #cbd5e1;
-                background: #f8fafc;
-                box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
-        }
-
-        .filter-pill.active {
-                background: #0f172a;
-                color: #f8fafc;
-        }
-
-        .filter-pill.active strong {
-                background: rgba(255, 255, 255, 0.16);
-                color: #f8fafc;
-        }
-
-        .queue-list {
-                display: grid;
-                gap: 0.72rem;
-        }
-
-        .queue-entry {
-                display: grid;
-                gap: 0.35rem;
-        }
-
-        .source-watch-entry {
-                position: relative;
-        }
-
-        .verification-watch-entry {
-                position: relative;
-        }
-
-        .triage-board,
-        .triage-copy {
-                display: grid;
-                gap: 1rem;
-        }
-
-        .triage-section {
-                display: grid;
-                gap: 0.9rem;
-        }
-
-        .triage-header {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 1rem;
-                padding: 0 0.15rem;
-        }
-
-        .triage-count {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                min-width: 3.1rem;
-                height: 3.1rem;
-                border-radius: 999px;
-                background: #0f172a;
-                color: #f8fafc;
-                font-size: 1rem;
-                font-weight: 800;
-                letter-spacing: 0.04em;
-        }
-
-        .queue-card {
-                display: grid;
-                grid-template-columns: auto minmax(0, 1fr) auto;
-                gap: 0.8rem;
-                align-items: stretch;
-                padding: 0.88rem 0.92rem;
-                color: inherit;
-                text-decoration: none;
-                transition:
-                        transform 160ms ease,
-                        border-color 160ms ease,
-                        box-shadow 160ms ease;
-        }
-
-        .queue-card:hover {
-                transform: translateY(-3px);
-                border-color: #94a3b8;
-                box-shadow: 0 22px 46px rgba(15, 23, 42, 0.11);
-        }
-
-        .queue-card.source-watch-card {
-                border-color: #fdba74;
-                background:
-                        linear-gradient(180deg, rgba(255, 251, 235, 0.98), rgba(255, 255, 255, 0.97)),
-                        #ffffff;
-                box-shadow: 0 18px 42px rgba(154, 52, 18, 0.08);
-        }
-
-        .queue-card.source-watch-card:hover {
-                border-color: #fb923c;
-                box-shadow: 0 22px 48px rgba(154, 52, 18, 0.12);
-        }
-
-        .queue-card.verification-watch-card {
-                border-color: #93c5fd;
-                background:
-                        linear-gradient(180deg, rgba(239, 246, 255, 0.94), rgba(255, 255, 255, 0.97)),
-                        #ffffff;
-                box-shadow: 0 18px 42px rgba(37, 99, 235, 0.08);
-        }
-
-        .queue-card.verification-watch-card:hover {
-                border-color: #60a5fa;
-                box-shadow: 0 22px 48px rgba(37, 99, 235, 0.12);
-        }
-
-        .queue-index {
-                display: grid;
-                align-content: space-between;
-                min-width: 4.15rem;
-                padding: 0.72rem 0.68rem;
-                border-radius: 0.95rem;
-                background: linear-gradient(180deg, #f8fafc, #eef2f7);
-                color: #0f172a;
-                text-align: center;
-        }
-
-        .queue-index strong {
-                font-size: 1.28rem;
-                line-height: 1;
-        }
-
-        .queue-main {
-                display: grid;
-                gap: 0.58rem;
-                min-width: 0;
-        }
-
-        .card-topline {
-                display: flex;
-                gap: 0.6rem;
-                align-items: center;
-                justify-content: space-between;
-        }
-
-        .card-chips {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 0.45rem;
-                justify-content: flex-end;
-        }
-
-        .chip,
-        .priority-badge,
-        .open-cta {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: 999px;
-                padding: 0.32rem 0.64rem;
-                font-size: 0.72rem;
-                font-weight: 800;
-                letter-spacing: 0.04em;
-                text-transform: uppercase;
-        }
-
-        .verdict-chip {
-                background: #dcfce7;
-                color: #166534;
-        }
-
-        .neutral-chip {
-                background: #e2e8f0;
-                color: #334155;
-        }
-
-        .source-watch-chip {
-                background: #fff7ed;
+        .warn-tag {
+                background: rgba(255, 237, 213, 0.95);
                 color: #9a3412;
         }
 
-        .verification-watch-chip {
-                background: #eff6ff;
-                color: #1d4ed8;
+        .info-tag {
+                background: rgba(224, 242, 254, 0.95);
+                color: #075985;
         }
 
-        .title-block {
-                display: grid;
-                gap: 0.18rem;
-        }
-
-        h3 {
-                color: #0f172a;
-                font-size: 1.04rem;
-                line-height: 1.24;
-                line-clamp: 2;
-                display: -webkit-box;
-                -webkit-box-orient: vertical;
-                -webkit-line-clamp: 2;
-                overflow: hidden;
-        }
-
-        .subtitle,
-        .story-summary {
-                color: #475569;
-        }
-
-        .subtitle {
-                font-size: 0.9rem;
-                line-height: 1.4;
-                line-clamp: 1;
-                display: -webkit-box;
-                -webkit-box-orient: vertical;
-                -webkit-line-clamp: 1;
-                overflow: hidden;
-        }
-
-        .story-summary {
-                font-size: 0.93rem;
-                line-height: 1.5;
-                line-clamp: 2;
-                display: -webkit-box;
-                -webkit-box-orient: vertical;
-                -webkit-line-clamp: 2;
-                overflow: hidden;
-        }
-
-        .meta-grid {
-                display: grid;
-                grid-template-columns: repeat(3, minmax(0, 1fr));
-                gap: 0.58rem;
-        }
-
-        .meta-block {
-                display: grid;
-                gap: 0.18rem;
-                padding-top: 0.58rem;
-                border-top: 1px solid rgba(148, 163, 184, 0.18);
-                min-width: 0;
-        }
-
-        .meta-block strong {
-                color: #0f172a;
-                font-size: 0.88rem;
-                overflow-wrap: anywhere;
-        }
-
-        .queue-side {
-                display: grid;
-                align-content: start;
-                justify-items: end;
-                gap: 0.72rem;
-                min-width: 8.35rem;
-        }
-
-        .priority-badge {
-                background: #fef3c7;
-                color: #92400e;
-        }
-
-        .open-cta {
-                background: #0f172a;
-                color: #f8fafc;
-                min-width: 7.2rem;
-        }
-
-        .queue-context-row {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                gap: 0.8rem;
-                padding: 0 0.3rem 0 0.4rem;
-                color: #64748b;
-                font-size: 0.85rem;
-        }
-
-        .source-context {
-                min-width: 0;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-        }
-
-        .source-context-copy {
-                display: grid;
-                gap: 0.2rem;
-                min-width: 0;
-        }
-
-        .source-freshness {
-                color: #94a3b8;
-                font-size: 0.78rem;
-                font-weight: 700;
-        }
-
-        .source-flag-row {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 0.35rem;
-        }
-
-        .source-flag {
-                display: inline-flex;
-                align-items: center;
-                border-radius: 999px;
-                padding: 0.22rem 0.55rem;
-                background: #fff7ed;
-                color: #9a3412;
-                font-size: 0.72rem;
-                font-weight: 800;
-                letter-spacing: 0.03em;
-                text-transform: uppercase;
-        }
-
-        .verification-flag-row {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 0.35rem;
-        }
-
-        .verification-flag {
-                display: inline-flex;
-                align-items: center;
-                border-radius: 999px;
-                padding: 0.22rem 0.55rem;
-                background: #eff6ff;
-                color: #1d4ed8;
-                font-size: 0.72rem;
-                font-weight: 800;
-                letter-spacing: 0.03em;
-                text-transform: uppercase;
-        }
-
-        .source-context-link {
-                flex-shrink: 0;
+        .neutral-tag {
+                background: rgba(226, 232, 240, 0.95);
                 color: #334155;
-                font-weight: 700;
-                text-decoration: none;
         }
 
-        .source-context-link:hover {
-                text-decoration: underline;
-        }
-
-        @media (max-width: 1024px) {
-                .board-overview,
-                .risk-summary-grid {
-                        grid-template-columns: repeat(2, minmax(0, 1fr));
-                }
-        }
-
-        @media (max-width: 820px) {
-                .queue-card {
+        @media (max-width: 1180px) {
+                .dashboard-shell {
                         grid-template-columns: 1fr;
                 }
 
-                .queue-index,
-                .queue-side {
-                        grid-auto-flow: column;
-                        align-items: center;
-                        justify-content: space-between;
-                        min-width: 0;
+                .dashboard-sidebar {
+                        display: none;
                 }
 
-                .queue-side {
-                        justify-items: stretch;
+                .section-tabs {
+                        display: flex;
                 }
 
-                .queue-context-row,
-                .priority-actions {
-                        align-items: flex-start;
-                        justify-items: stretch;
-                }
-
-                .open-cta {
-                        min-width: 0;
+                .stats-grid,
+                .overview-layout {
+                        grid-template-columns: 1fr 1fr;
                 }
         }
 
-        @media (max-width: 640px) {
-                .board-overview,
-                .risk-summary-grid,
-                .meta-grid {
+        @media (max-width: 800px) {
+                .dashboard-content {
+                        padding: 1rem;
+                }
+
+                .content-header,
+                .panel-header.stacked-mobile,
+                .panel-header {
+                        grid-template-columns: 1fr;
+                        display: grid;
+                }
+
+                .stats-grid,
+                .overview-layout,
+                .signal-grid,
+                .summary-grid {
                         grid-template-columns: 1fr;
                 }
 
-                .resume-panel {
-                        flex-direction: column;
-                        align-items: stretch;
-                }
-
-                .priority-panel {
-                        flex-direction: column;
-                        align-items: stretch;
-                }
-
-                .queue-context-row {
-                        flex-direction: column;
-                        align-items: flex-start;
-                        padding-inline: 0;
-                }
-
-                .triage-header {
-                        align-items: flex-start;
-                        flex-direction: column;
-                }
-
-                .card-topline {
-                        flex-direction: column;
-                        align-items: flex-start;
-                }
-
-                .card-chips {
-                        justify-content: flex-start;
-                }
-
-                .status-footer {
-                        flex-direction: column;
+                .article-table {
+                        min-width: 760px;
                 }
         }
 </style>

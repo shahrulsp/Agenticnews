@@ -150,6 +150,30 @@
 			</div>
 		</div>
 
+                {#if article.why_viral || article.form || article.is_sensitive}
+                        <section class="context-card">
+                                <p class="section-eyebrow">{data.locale === 'ms' ? 'Konteks studio' : 'Studio context'}</p>
+                                <h2>{data.locale === 'ms' ? 'Konteks cerita' : 'Story context'}</h2>
+                                {#if article.why_viral}
+                                        <p>{article.why_viral}</p>
+                                {/if}
+                                {#if article.form || article.is_sensitive}
+                                        <div class="context-tags">
+                                                {#if article.form}
+                                                        <span class="context-pill">
+                                                                {data.locale === 'ms' ? 'Format' : 'Form'}: {formatLabel(article.form)}
+                                                        </span>
+                                                {/if}
+                                                {#if article.is_sensitive}
+                                                        <span class="context-pill warn-pill">
+                                                                {data.locale === 'ms' ? 'Topik sensitif' : 'Sensitive topic'}
+                                                        </span>
+                                                {/if}
+                                        </div>
+                                {/if}
+                        </section>
+                {/if}
+
 		<section class="body-card">
                         <p class="section-eyebrow">{data.locale === 'ms' ? 'Laporan utama' : 'Main report'}</p>
                         <h2>{data.locale === 'ms' ? 'Liputan penuh' : 'Full report'}</h2>
@@ -244,6 +268,7 @@
 
 	.article-hero,
 	.meta-card,
+        .context-card,
 	.body-card,
 	.info-card,
 	.message-card {
@@ -331,6 +356,7 @@
 
 	.lede,
 	.value,
+        .context-card p,
 	.meta-card p,
 	.info-card p {
 		color: #334155;
@@ -364,6 +390,7 @@
 
 	.hero-meta-strip,
 	.meta-card,
+        .context-tags,
 	.detail-grid {
 		display: grid;
 		gap: 1rem;
@@ -392,6 +419,34 @@
 	.meta-card {
 		grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
 	}
+
+        .context-card {
+                display: grid;
+                gap: 0.85rem;
+        }
+
+        .context-tags {
+                grid-template-columns: repeat(auto-fit, minmax(10rem, max-content));
+                gap: 0.65rem;
+                justify-content: start;
+        }
+
+        .context-pill {
+                display: inline-flex;
+                align-items: center;
+                width: fit-content;
+                padding: 0.45rem 0.75rem;
+                border-radius: 999px;
+                background: rgba(226, 232, 240, 0.82);
+                color: #334155;
+                font-size: 0.88rem;
+                font-weight: 700;
+        }
+
+        .warn-pill {
+                background: rgba(255, 237, 213, 0.92);
+                color: #9a3412;
+        }
 
 	.section-eyebrow {
 		margin-bottom: 0.45rem;

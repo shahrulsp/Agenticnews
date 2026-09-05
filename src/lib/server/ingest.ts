@@ -18,7 +18,10 @@ const ARTICLE_CATEGORIES: ArticleCategory[] = [
 	'business',
 	'science',
         'offbeat',
-        'crime'
+        'crime',
+        'politics',
+        'entertainment',
+        'sports'
 ];
 
 const ARTICLE_REGIONS: ArticleRegion[] = [
@@ -30,8 +33,11 @@ const ARTICLE_REGIONS: ArticleRegion[] = [
 	'vietnam',
 	'japan',
 	'south-korea',
-	'china',
 	'india',
+        'taiwan',
+        'bangladesh',
+        'sri-lanka',
+        'china',
 	'other-asia',
 	'global'
 ];
@@ -40,8 +46,10 @@ const HYPE_LEVELS: HypeLevel[] = ['low', 'medium', 'high', 'extreme'];
 const FACTCHECK_VERDICTS: FactCheckVerdict[] = [
 	'verified',
 	'mostly-true',
+        'partially-verified',
 	'disputed',
 	'unverifiable',
+        'unverified',
 	'false',
 	'pending'
 ];
@@ -73,6 +81,25 @@ type DraftArticlePayload = InternalDraftArticlePayload & {
 	image_url?: unknown;
 	image_alt?: unknown;
 	image_caption?: unknown;
+        form?: unknown;
+        summary?: unknown;
+        why_viral?: unknown;
+        key_claims?: unknown;
+        claims_made?: unknown;
+        secondary_sources?: unknown;
+        sensitivity_notes?: unknown;
+        is_sensitive?: unknown;
+        scout_payload?: unknown;
+        sentinel_payload?: unknown;
+        lens_payload?: unknown;
+        polyglot_payload?: unknown;
+        glossary_notes?: unknown;
+        quality_notes?: unknown;
+        image_strategy?: unknown;
+        image_source_recommendation?: unknown;
+        image_notes_for_human?: unknown;
+        source_recommendation?: unknown;
+        notes_for_human?: unknown;
 };
 
 type DraftEnvelopePayload = InternalDraftIngestPayload & {
@@ -103,6 +130,10 @@ function readStringArray(value: unknown): string[] | null {
 	return normalized.length > 0 ? normalized : null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+        return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function readEnumValue<T extends string>(
 	value: unknown,
 	allowed: readonly T[],
@@ -121,6 +152,39 @@ function readOptionalNumber(value: unknown): number | undefined {
 	}
 
 	return value;
+}
+
+function readOptionalBoolean(value: unknown): boolean | undefined {
+        return typeof value === 'boolean' ? value : undefined;
+}
+
+function readOptionalPayloadObject(value: unknown): Record<string, unknown> | null {
+        return isRecord(value) ? value : null;
+}
+
+function readGlossaryNotes(value: unknown): Array<Record<string, string>> | null {
+        if (!Array.isArray(value)) {
+                return null;
+        }
+
+        const normalized = value.flatMap((entry) => {
+                if (!isRecord(entry)) {
+                        return [];
+                }
+
+                const pairs = Object.entries(entry).flatMap(([key, itemValue]) => {
+                        if (typeof itemValue !== 'string') {
+                                return [];
+                        }
+
+                        const normalizedValue = itemValue.trim();
+                        return normalizedValue.length > 0 ? [[key, normalizedValue] as const] : [];
+                });
+
+                return pairs.length > 0 ? [Object.fromEntries(pairs)] : [];
+        });
+
+        return normalized.length > 0 ? normalized : null;
 }
 
 export function isAuthorizedIngestRequest(
@@ -188,6 +252,27 @@ export function parseDraftIngestPayload(payload: unknown): ArticleDraftInput {
 			en && typeof en === 'object' ? readOptionalString(en.prompt_question) : null,
 		image_url: readOptionalString(article.image_url),
 		image_alt: readOptionalString(article.image_alt),
-		image_caption: readOptionalString(article.image_caption)
+                image_caption: readOptionalString(article.image_caption),
+                form: readOptionalString(article.form),
+                summary: readOptionalString(article.summary),
+                why_viral: readOptionalString(article.why_viral),
+                key_claims: readStringArray(article.key_claims),
+                claims_made: readStringArray(article.claims_made),
+                secondary_sources: readStringArray(article.secondary_sources),
+                sensitivity_notes: readOptionalString(article.sensitivity_notes),
+                is_sensitive: readOptionalBoolean(article.is_sensitive) ?? false,
+                scout_payload: readOptionalPayloadObject(article.scout_payload),
+                sentinel_payload: readOptionalPayloadObject(article.sentinel_payload),
+                lens_payload: readOptionalPayloadObject(article.lens_payload),
+                polyglot_payload: readOptionalPayloadObject(article.polyglot_payload),
+                glossary_notes: readGlossaryNotes(article.glossary_notes),
+                quality_notes: readOptionalString(article.quality_notes),
+                image_strategy: readOptionalString(article.image_strategy),
+                image_source_recommendation:
+                        readOptionalString(article.image_source_recommendation) ??
+                        readOptionalString(article.source_recommendation),
+                image_notes_for_human:
+                        readOptionalString(article.image_notes_for_human) ??
+                        readOptionalString(article.notes_for_human)
 	};
 }

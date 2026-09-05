@@ -180,6 +180,102 @@ describe('query helpers', () => {
 		);
 	});
 
+        it('passes sanitized Studio metadata through createDraftArticle', async () => {
+                const database = createMockDatabase([
+                        {
+                                id: 'article-900',
+                                slug: 'studio-test-story',
+                                status: 'pending'
+                        }
+                ]);
+
+                await createDraftArticle(
+                        {
+                                slug: 'studio-test-story',
+                                category: 'entertainment',
+                                region: 'sri-lanka',
+                                hype_level: 'high',
+                                summary: ' Short <strong>summary</strong> ',
+                                why_viral: ' Big <em>online</em> reaction ',
+                                key_claims: [' Claim <strong>1</strong> ', 'Claim 2<script>bad()</script>'],
+                                claims_made: [' Claim <em>A</em> '],
+                                secondary_sources: [' https://example.com/extra '],
+                                sensitivity_notes: ' Keep <script>bad()</script>legal wording careful ',
+                                is_sensitive: false,
+                                form: ' short ',
+                                scout_payload: {
+                                        angle: ' Crowd <strong>reaction</strong> ',
+                                        nested: {
+                                                note: ' <em>Keep</em> context '
+                                        }
+                                },
+                                sentinel_payload: {
+                                        risk_label: '<script>bad()</script>medium'
+                                },
+                                lens_payload: {
+                                        shot_list: [' Wide <strong>frame</strong> ']
+                                },
+                                polyglot_payload: {
+                                        translation_status: ' ready '
+                                },
+                                glossary_notes: [
+                                        {
+                                                ' Term <strong>A</strong> ': ' Note <script>bad()</script>one '
+                                        }
+                                ],
+                                quality_notes: ' Needs <em>desk</em> review ',
+                                image_strategy: ' Use <strong>arena</strong> stills ',
+                                image_source_recommendation: ' Getty <em>editorial</em> ',
+                                image_notes_for_human: ' Avoid <script>bad()</script>faces ',
+                                title_ms: 'Tajuk BM',
+                                body_ms: '<p>Isi</p>'
+                        },
+                        { database }
+                );
+
+                const [sql, params] = vi.mocked(database.query).mock.calls[0]!;
+
+                expect(sql).toContain('summary');
+                expect(sql).toContain('summary = EXCLUDED.summary');
+                expect(sql).toContain('image_notes_for_human = EXCLUDED.image_notes_for_human');
+                expect(params).toEqual(
+                        expect.arrayContaining([
+                                'Short summary',
+                                'Big online reaction',
+                                ['Claim 1', 'Claim 2'],
+                                ['Claim A'],
+                                ['https://example.com/extra'],
+                                'Keep legal wording careful',
+                                false,
+                                'short',
+                                {
+                                        angle: 'Crowd reaction',
+                                        nested: {
+                                                note: 'Keep context'
+                                        }
+                                },
+                                {
+                                        risk_label: 'medium'
+                                },
+                                {
+                                        shot_list: ['Wide frame']
+                                },
+                                {
+                                        translation_status: 'ready'
+                                },
+                                [
+                                        {
+                                                'Term A': 'Note one'
+                                        }
+                                ],
+                                'Needs desk review',
+                                'Use arena stills',
+                                'Getty editorial',
+                                'Avoid faces'
+                        ])
+                );
+        });
+
         it('refreshes an existing pending draft when the same slug is ingested again', async () => {
                 const database = createMockDatabase([
                         {
@@ -201,10 +297,13 @@ describe('query helpers', () => {
                         { database }
                 );
 
-                expect(database.query).toHaveBeenCalledWith(
-                        expect.stringContaining("WHERE articles.status IN ('pending', 'rejected')"),
-                        expect.any(Array)
-                );
+                const [sql, params] = vi.mocked(database.query).mock.calls[0]!;
+
+                expect(sql).toContain("WHERE articles.status IN ('pending', 'rejected')");
+                expect(sql).toContain('summary = EXCLUDED.summary');
+                expect(sql).toContain('scout_payload = EXCLUDED.scout_payload');
+                expect(sql).toContain('glossary_notes = EXCLUDED.glossary_notes');
+                expect(params).toEqual(expect.any(Array));
         });
 
         it('keeps a published slug protected when a duplicate draft is ingested', async () => {
