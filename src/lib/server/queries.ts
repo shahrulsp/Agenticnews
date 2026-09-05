@@ -46,6 +46,10 @@ function normalizeOffset(value: number | undefined): number {
 	return Math.max(Math.trunc(value), 0);
 }
 
+function toJsonbParam(value: unknown): string {
+        return JSON.stringify(value);
+}
+
 export async function getPublishedArticles({
 	database = getDatabaseClient(),
 	limit = 12,
@@ -316,8 +320,8 @@ export async function createDraftArticle(
 				image_caption
 			) VALUES (
                                 $1, 'pending', $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                                $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21,
-                                $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32,
+                                $11, $12, $13, $14, $15, $16::jsonb, $17::jsonb, $18::jsonb, $19, $20, $21,
+                                $22, $23::jsonb, $24::jsonb, $25::jsonb, $26::jsonb, $27::jsonb, $28, $29, $30, $31, $32,
                                 $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43
 			)
                         ON CONFLICT (slug) DO UPDATE
@@ -385,17 +389,17 @@ export async function createDraftArticle(
 			sanitized.factcheck_summary ?? null,
                         sanitized.summary ?? null,
                         sanitized.why_viral ?? null,
-                        sanitized.key_claims ?? [],
-                        sanitized.claims_made ?? [],
-                        sanitized.secondary_sources ?? [],
+                        toJsonbParam(sanitized.key_claims ?? []),
+                        toJsonbParam(sanitized.claims_made ?? []),
+                        toJsonbParam(sanitized.secondary_sources ?? []),
                         sanitized.sensitivity_notes ?? null,
                         sanitized.is_sensitive ?? false,
                         sanitized.form ?? null,
-                        sanitized.scout_payload ?? {},
-                        sanitized.sentinel_payload ?? {},
-                        sanitized.lens_payload ?? {},
-                        sanitized.polyglot_payload ?? {},
-                        sanitized.glossary_notes ?? [],
+                        toJsonbParam(sanitized.scout_payload ?? {}),
+                        toJsonbParam(sanitized.sentinel_payload ?? {}),
+                        toJsonbParam(sanitized.lens_payload ?? {}),
+                        toJsonbParam(sanitized.polyglot_payload ?? {}),
+                        toJsonbParam(sanitized.glossary_notes ?? []),
                         sanitized.quality_notes ?? null,
                         sanitized.image_strategy ?? null,
                         sanitized.image_source_recommendation ?? null,

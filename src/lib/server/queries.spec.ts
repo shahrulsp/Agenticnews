@@ -242,32 +242,32 @@ describe('query helpers', () => {
                         expect.arrayContaining([
                                 'Short summary',
                                 'Big online reaction',
-                                ['Claim 1', 'Claim 2'],
-                                ['Claim A'],
-                                ['https://example.com/extra'],
+                                JSON.stringify(['Claim 1', 'Claim 2']),
+                                JSON.stringify(['Claim A']),
+                                JSON.stringify(['https://example.com/extra']),
                                 'Keep legal wording careful',
                                 false,
                                 'short',
-                                {
+                                JSON.stringify({
                                         angle: 'Crowd reaction',
                                         nested: {
                                                 note: 'Keep context'
                                         }
-                                },
-                                {
+                                }),
+                                JSON.stringify({
                                         risk_label: 'medium'
-                                },
-                                {
+                                }),
+                                JSON.stringify({
                                         shot_list: ['Wide frame']
-                                },
-                                {
+                                }),
+                                JSON.stringify({
                                         translation_status: 'ready'
-                                },
-                                [
+                                }),
+                                JSON.stringify([
                                         {
                                                 'Term A': 'Note one'
                                         }
-                                ],
+                                ]),
                                 'Needs desk review',
                                 'Use arena stills',
                                 'Getty editorial',
