@@ -10,7 +10,8 @@ import {
 	getPendingArticles,
 	getPublishedArticles,
         rejectArticle,
-        updatePendingArticleDraft
+        updatePendingArticleDraft,
+        updatePendingArticleImage
 } from './queries';
 
 function createMockDatabase(rows: unknown[] = []) {
@@ -105,6 +106,43 @@ describe('query helpers', () => {
                                 'disputed',
                                 42,
                                 '<p>Checked</p>'
+                        ]
+                );
+        });
+
+        it('updates a pending draft image with sanitized Lens output', async () => {
+                const database = createMockDatabase();
+
+                await updatePendingArticleImage(
+                        'article-999',
+                        {
+                                image_url:
+                                        ' https://coresg-normal.trae.ai/api/ide/v1/text_to_image?prompt=test&image_size=landscape_16_9 ',
+                                image_alt: ' Crowd <strong>celebration</strong> image ',
+                                image_caption: ' Caption <script>bad()</script>line ',
+                                lens_payload: {
+                                        image_prompt: ' Arena <strong>scene</strong> '
+                                },
+                                image_strategy: ' Use <strong>wide</strong> angle ',
+                                image_source_recommendation: ' AI <em>generated</em> image ',
+                                image_notes_for_human: ' Keep <script>bad()</script>logos out '
+                        },
+                        { database }
+                );
+
+                expect(database.query).toHaveBeenCalledWith(
+                        expect.stringContaining('lens_payload = $5::jsonb'),
+                        [
+                                'article-999',
+                                'https://coresg-normal.trae.ai/api/ide/v1/text_to_image?prompt=test&image_size=landscape_16_9',
+                                'Crowd celebration image',
+                                'Caption line',
+                                JSON.stringify({
+                                        image_prompt: 'Arena scene'
+                                }),
+                                'Use wide angle',
+                                'AI generated image',
+                                'Keep logos out'
                         ]
                 );
         });

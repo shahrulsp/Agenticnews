@@ -19,6 +19,9 @@
                         factcheck_confidence: string;
                         factcheck_summary: string;
                 };
+                imageValues?: {
+                        image_direction: string;
+                };
         };
 
         const factCheckOptions = [
@@ -345,6 +348,13 @@
                         </div>
                 {/if}
 
+                {#if data.reviewState === 'image-refreshed'}
+                        <div class="message-card success-card">
+                                <p class="label">Image refreshed</p>
+                                <p class="value">Lens generated a fresh image package for this pending draft.</p>
+                        </div>
+                {/if}
+
                 <form id={EDITOR_FORM_ID} class="content-grid editor-grid" method="POST" action="?/save">
 			<section class="content-card">
                                 <div class="section-header">
@@ -545,21 +555,47 @@
                                 <div class="section-header">
                                         <div>
                                                 <h3>Asset reference</h3>
-                                                <p class="helper-text">Media pointers still stay visible beside the editable draft fields.</p>
+                                                <p class="helper-text">Media pointers and Lens controls stay visible beside the editable draft fields.</p>
                                         </div>
                                 </div>
 				<dl class="notes">
-					<div>
-						<dt>Image URL</dt>
+                                        <div>
+                                                <dt>Current image</dt>
                                                 <dd>
                                                         {#if article.image_url}
-                                                                <a class="resource-link" href={article.image_url} target="_blank" rel="noreferrer">
-                                                                        Open image asset
-                                                                </a>
+                                                                <div class="asset-preview-stack">
+                                                                        <img
+                                                                                class="asset-preview"
+                                                                                src={article.image_url}
+                                                                                alt={article.image_alt ?? article.title_ms}
+                                                                                loading="lazy"
+                                                                        />
+                                                                        <div class="asset-copy">
+                                                                                <a class="resource-link" href={article.image_url} target="_blank" rel="noreferrer">
+                                                                                        Open image asset
+                                                                                </a>
+                                                                                <p>{article.image_alt ?? 'No alt text saved yet'}</p>
+                                                                                {#if article.image_caption}
+                                                                                        <p>{article.image_caption}</p>
+                                                                                {/if}
+                                                                        </div>
+                                                                </div>
                                                         {:else}
                                                                 No image set
                                                         {/if}
                                                 </dd>
+                                        </div>
+					<div>
+                                                <dt>Lens strategy</dt>
+                                                <dd>{article.image_strategy ?? 'Lens has not stored a strategy yet.'}</dd>
+                                        </div>
+                                        <div>
+                                                <dt>Lens source recommendation</dt>
+                                                <dd>{article.image_source_recommendation ?? 'No source recommendation saved yet.'}</dd>
+                                        </div>
+                                        <div>
+                                                <dt>Lens notes</dt>
+                                                <dd>{article.image_notes_for_human ?? 'No desk note from Lens yet.'}</dd>
 					</div>
 					<div>
                                                 <dt>Stored source</dt>
@@ -586,6 +622,25 @@
 						<dd>{article.agent_run_id ?? 'No workflow execution ID stored'}</dd>
 					</div>
 				</dl>
+                                <form class="editor-form lens-refresh-form" method="POST" action="?/refreshImage">
+                                        <label class="field-group">
+                                                <span class="field-label">Replacement brief for Lens</span>
+                                                <textarea
+                                                        class="editor-textarea compact-textarea lens-direction-textarea"
+                                                        name="image_direction"
+                                                        rows="6"
+                                                        placeholder="Example: keep the same story angle but avoid crowd chaos, use a cleaner courtside celebration shot."
+                                                >{form?.imageValues?.image_direction ?? ''}</textarea>
+                                        </label>
+                                        <div class="editor-submit-row">
+                                                <button class="tertiary-button inline-save-button" type="submit">
+                                                        Ask Lens to regenerate image
+                                                </button>
+                                                <p class="helper-text">
+                                                        Leave the note blank for a fresh default image, or describe how you want Lens to replace the current one.
+                                                </p>
+                                        </div>
+                                </form>
 			</section>
 		</div>
 	{/if}
@@ -1098,6 +1153,32 @@
         .source-reference-stack {
                 display: grid;
                 gap: 0.35rem;
+        }
+
+        .asset-preview-stack,
+        .asset-copy {
+                display: grid;
+                gap: 0.75rem;
+        }
+
+        .asset-preview {
+                width: 100%;
+                max-width: 24rem;
+                border-radius: 1rem;
+                border: 1px solid rgba(148, 163, 184, 0.24);
+                background: #e2e8f0;
+                box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+                object-fit: cover;
+        }
+
+        .lens-refresh-form {
+                margin-top: 1.3rem;
+                padding-top: 1rem;
+                border-top: 1px solid rgba(148, 163, 184, 0.18);
+        }
+
+        .lens-direction-textarea {
+                min-height: 8.5rem;
         }
 
         @media (max-width: 920px) {

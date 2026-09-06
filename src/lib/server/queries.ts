@@ -1,7 +1,11 @@
-import type { Article, ArticleDraftEditorInput, ArticleDraftInput } from '$lib/types';
+import type { Article, ArticleDraftEditorInput, ArticleDraftInput, ArticleImageEditorInput } from '$lib/types';
 
 import { getDatabaseClient, type DatabaseClient } from './db';
-import { sanitizeArticleDraftEditorInput, sanitizeArticleDraftInput } from './sanitize';
+import {
+        sanitizeArticleDraftEditorInput,
+        sanitizeArticleDraftInput,
+        sanitizeArticleImageEditorInput
+} from './sanitize';
 
 type QueryOptions = {
 	database?: DatabaseClient;
@@ -48,44 +52,6 @@ function normalizeOffset(value: number | undefined): number {
 
 function toJsonbParam(value: unknown): string {
         return JSON.stringify(value);
-}
-
-async function reportDebugEvent(
-        hypothesisId: string,
-        location: string,
-        msg: string,
-        data: Record<string, unknown>
-): Promise<void> {
-        let serverUrl = 'http://127.0.0.1:7777/event';
-        let sessionId = 'second-ingest-json';
-
-        try {
-                const { readFile } = await import('node:fs/promises');
-                const envFile = await readFile('.dbg/second-ingest-json.env', 'utf8');
-
-                serverUrl =
-                        envFile.match(/^DEBUG_SERVER_URL=(.+)$/m)?.[1]?.trim() ?? serverUrl;
-                sessionId =
-                        envFile.match(/^DEBUG_SESSION_ID=(.+)$/m)?.[1]?.trim() ?? sessionId;
-        } catch {
-                // Debug logging is best-effort only.
-        }
-
-        await fetch(serverUrl, {
-                method: 'POST',
-                headers: {
-                        'content-type': 'application/json'
-                },
-                body: JSON.stringify({
-                        sessionId,
-                        runId: 'pre-fix',
-                        hypothesisId,
-                        location,
-                        msg,
-                        data,
-                        ts: Date.now()
-                })
-        }).catch(() => undefined);
 }
 
 export async function getPublishedArticles({
@@ -304,28 +270,46 @@ export async function updatePendingArticleDraft(
         return (rows[0] as Article | undefined) ?? null;
 }
 
+export async function updatePendingArticleImage(
+        id: string,
+        input: ArticleImageEditorInput,
+        { database = getDatabaseClient() }: QueryOptions = {}
+): Promise<Article | null> {
+        const sanitized = sanitizeArticleImageEditorInput(input);
+        const rows = await database.query(
+                `
+                        UPDATE articles
+                        SET image_url = $2,
+                                image_alt = $3,
+                                image_caption = $4,
+                                lens_payload = $5::jsonb,
+                                image_strategy = $6,
+                                image_source_recommendation = $7,
+                                image_notes_for_human = $8,
+                                updated_at = NOW()
+                        WHERE id = $1 AND status = 'pending'
+                        RETURNING *
+                `,
+                [
+                        id,
+                        sanitized.image_url ?? null,
+                        sanitized.image_alt ?? null,
+                        sanitized.image_caption ?? null,
+                        toJsonbParam(sanitized.lens_payload ?? {}),
+                        sanitized.image_strategy ?? null,
+                        sanitized.image_source_recommendation ?? null,
+                        sanitized.image_notes_for_human ?? null
+                ]
+        );
+
+        return (rows[0] as Article | undefined) ?? null;
+}
+
 export async function createDraftArticle(
 	input: ArticleDraftInput,
 	{ database = getDatabaseClient() }: QueryOptions = {}
 ): Promise<Article> {
 	const sanitized = sanitizeArticleDraftInput(input);
-        // #region debug-point C:draft-insert-shape
-        void reportDebugEvent(
-                'C',
-                'src/lib/server/queries.ts:createDraftArticle',
-                '[DEBUG] Draft insert parameter shape',
-                {
-                        slug: sanitized.slug,
-                        hasQualityNotes: sanitized.quality_notes != null,
-                        hasImageStrategy: sanitized.image_strategy != null,
-                        hasGlossaryNotes: (sanitized.glossary_notes?.length ?? 0) > 0,
-                        hasScoutPayload: sanitized.scout_payload != null,
-                        hasSentinelPayload: sanitized.sentinel_payload != null,
-                        hasLensPayload: sanitized.lens_payload != null,
-                        hasPolyglotPayload: sanitized.polyglot_payload != null
-                }
-        );
-        // #endregion
 	const rows = await database.query(
 		`
 			INSERT INTO articles (

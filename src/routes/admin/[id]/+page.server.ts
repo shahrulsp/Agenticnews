@@ -1,12 +1,15 @@
+import { env } from '$env/dynamic/private';
 import {
         approveArticle,
         getArticleById,
         getMorningBatchProgress,
         getPendingArticleNavigator,
         rejectArticle,
-        updatePendingArticleDraft
+        updatePendingArticleDraft,
+        updatePendingArticleImage
 } from '$lib/server/queries';
 import { hasDatabaseConfig } from '$lib/server/db';
+import { generateLensImageForArticle } from '$lib/server/lens';
 import { sanitizeArticleForRender } from '$lib/server/sanitize';
 import { error, fail, redirect } from '@sveltejs/kit';
 import type { FactCheckVerdict } from '$lib/types';
@@ -115,13 +118,13 @@ function normalizeFactCheckConfidence(value: string): number | null {
         }
 
         const parsed = Number.parseInt(trimmed, 10);
-
         if (!Number.isInteger(parsed) || parsed < 0 || parsed > 100) {
                 return null;
         }
 
         return parsed;
 }
+
 
 export const load: PageServerLoad = async ({ params, url }) => {
         const reviewState = url.searchParams.get('review');
@@ -170,6 +173,75 @@ export const load: PageServerLoad = async ({ params, url }) => {
 };
 
 export const actions: Actions = {
+        refreshImage: async ({ params, request }) => {
+                const formData = await request.formData();
+                const imageDirection =
+                        typeof formData.get('image_direction') === 'string'
+                                ? String(formData.get('image_direction'))
+                                : '';
+
+                if (!hasDatabaseConfig()) {
+                        return fail(503, {
+                                reviewError: 'Add NEON_DATABASE_URL to your local .env before refreshing images.',
+                                imageValues: {
+                                        image_direction: imageDirection
+                                }
+                        });
+                }
+
+                if (!env.MISTRAL_API_KEY?.trim()) {
+                        return fail(503, {
+                                reviewError: 'Add MISTRAL_API_KEY before asking Lens to refresh the image.',
+                                imageValues: {
+                                        image_direction: imageDirection
+                                }
+                        });
+                }
+
+                try {
+                        const article = await getArticleById(params.id);
+
+                        if (!article || article.status !== 'pending') {
+                                return fail(404, {
+                                        reviewError: 'This article is no longer pending review.',
+                                        imageValues: {
+                                                image_direction: imageDirection
+                                        }
+                                });
+                        }
+
+                        const imageUpdate = await generateLensImageForArticle(article, {
+                                apiKey: env.MISTRAL_API_KEY,
+                                model: env.MISTRAL_TEXT_MODEL,
+                                editorInstruction: imageDirection
+                        });
+                        const result = await updatePendingArticleImage(params.id, imageUpdate);
+
+                        if (!result) {
+                                return fail(404, {
+                                        reviewError: 'This article is no longer pending review.',
+                                        imageValues: {
+                                                image_direction: imageDirection
+                                        }
+                                });
+                        }
+
+                        throw redirect(303, `/admin/${params.id}?review=image-refreshed`);
+                } catch (err) {
+                        if (err && typeof err === 'object' && 'status' in err) {
+                                throw err;
+                        }
+
+                        return fail(500, {
+                                reviewError:
+                                        err instanceof Error ? err.message : 'Unable to refresh the Lens image.',
+                                imageValues: {
+                                        image_direction: imageDirection
+                                }
+                        });
+                }
+        },
+
         save: async ({ params, request }) => {
                 if (!hasDatabaseConfig()) {
                         return fail(503, {

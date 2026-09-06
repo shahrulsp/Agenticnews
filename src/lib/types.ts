@@ -157,6 +157,16 @@ export interface ArticleDraftEditorInput {
         factcheck_summary?: string | null;
 }
 
+export interface ArticleImageEditorInput {
+        image_url?: string | null;
+        image_alt?: string | null;
+        image_caption?: string | null;
+        lens_payload?: AgentMetadataPayload | null;
+        image_strategy?: string | null;
+        image_source_recommendation?: string | null;
+        image_notes_for_human?: string | null;
+}
+
 export interface InternalDraftLocalePayload {
 	title?: string;
 	body?: string;

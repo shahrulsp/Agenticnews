@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Article, ArticleDraftEditorInput, ArticleDraftInput } from '$lib/types';
+import type { Article, ArticleDraftEditorInput, ArticleDraftInput, ArticleImageEditorInput } from '$lib/types';
 
 import {
         sanitizeArticleDraftEditorInput,
 	sanitizeArticleDraftInput,
+        sanitizeArticleImageEditorInput,
 	sanitizeArticleForRender,
 	sanitizePlainText,
 	sanitizeRichText
@@ -151,6 +152,42 @@ describe('sanitizeArticleDraftEditorInput', () => {
                 expect(sanitized.factcheck_verdict).toBe('disputed');
                 expect(sanitized.factcheck_confidence).toBe(42);
                 expect(sanitized.factcheck_summary).toBe('<p>Checked</p>');
+        });
+});
+
+describe('sanitizeArticleImageEditorInput', () => {
+        it('sanitizes generated image metadata before persistence', () => {
+                const input: ArticleImageEditorInput = {
+                        image_url: ' https://coresg-normal.trae.ai/api/ide/v1/text_to_image?prompt=test&image_size=landscape_16_9 ',
+                        image_alt: ' Crowd <strong>celebration</strong> image ',
+                        image_caption: ' Caption <script>bad()</script>line ',
+                        lens_payload: {
+                                image_prompt: ' Arena <strong>scene</strong> ',
+                                nested: {
+                                        note: ' Avoid <script>bad()</script>faces '
+                                }
+                        },
+                        image_strategy: ' Use <strong>wide</strong> angle ',
+                        image_source_recommendation: ' AI <em>generated</em> editorial art ',
+                        image_notes_for_human: ' Keep <script>bad()</script>branding out '
+                };
+
+                const sanitized = sanitizeArticleImageEditorInput(input);
+
+                expect(sanitized.image_url).toBe(
+                        'https://coresg-normal.trae.ai/api/ide/v1/text_to_image?prompt=test&image_size=landscape_16_9'
+                );
+                expect(sanitized.image_alt).toBe('Crowd celebration image');
+                expect(sanitized.image_caption).toBe('Caption line');
+                expect(sanitized.lens_payload).toEqual({
+                        image_prompt: 'Arena scene',
+                        nested: {
+                                note: 'Avoid faces'
+                        }
+                });
+                expect(sanitized.image_strategy).toBe('Use wide angle');
+                expect(sanitized.image_source_recommendation).toBe('AI generated editorial art');
+                expect(sanitized.image_notes_for_human).toBe('Keep branding out');
         });
 });
 

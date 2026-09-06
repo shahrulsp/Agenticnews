@@ -4,6 +4,7 @@ import type {
         AgentMetadataPayload,
         Article,
         ArticleDraftEditorInput,
+        ArticleImageEditorInput,
         ArticleDraftInput,
         GlossaryNote
 } from '$lib/types';
@@ -79,6 +80,15 @@ function sanitizeStringArray(
                 const sanitized = sanitizePlainText(value);
                 return sanitized == null ? [] : [sanitized];
         });
+}
+
+function sanitizeOptionalUrl(value: string | null | undefined): string | null {
+        if (value == null) {
+                return null;
+        }
+
+        const trimmed = value.trim();
+        return trimmed.length > 0 ? trimmed : null;
 }
 
 function sanitizeMetadataValue(value: unknown): unknown {
@@ -189,6 +199,20 @@ export function sanitizeArticleDraftEditorInput(
                 factcheck_verdict: input.factcheck_verdict,
                 factcheck_confidence: input.factcheck_confidence,
                 factcheck_summary: sanitizeRichText(input.factcheck_summary)
+        };
+}
+
+export function sanitizeArticleImageEditorInput(
+        input: ArticleImageEditorInput
+): ArticleImageEditorInput {
+        return {
+                image_url: sanitizeOptionalUrl(input.image_url),
+                image_alt: sanitizePlainText(input.image_alt),
+                image_caption: sanitizePlainText(input.image_caption),
+                lens_payload: sanitizeMetadataPayload(input.lens_payload),
+                image_strategy: sanitizePlainText(input.image_strategy),
+                image_source_recommendation: sanitizePlainText(input.image_source_recommendation),
+                image_notes_for_human: sanitizePlainText(input.image_notes_for_human)
         };
 }
 
