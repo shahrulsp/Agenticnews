@@ -50,6 +50,44 @@ function toJsonbParam(value: unknown): string {
         return JSON.stringify(value);
 }
 
+async function reportDebugEvent(
+        hypothesisId: string,
+        location: string,
+        msg: string,
+        data: Record<string, unknown>
+): Promise<void> {
+        let serverUrl = 'http://127.0.0.1:7777/event';
+        let sessionId = 'second-ingest-json';
+
+        try {
+                const { readFile } = await import('node:fs/promises');
+                const envFile = await readFile('.dbg/second-ingest-json.env', 'utf8');
+
+                serverUrl =
+                        envFile.match(/^DEBUG_SERVER_URL=(.+)$/m)?.[1]?.trim() ?? serverUrl;
+                sessionId =
+                        envFile.match(/^DEBUG_SESSION_ID=(.+)$/m)?.[1]?.trim() ?? sessionId;
+        } catch {
+                // Debug logging is best-effort only.
+        }
+
+        await fetch(serverUrl, {
+                method: 'POST',
+                headers: {
+                        'content-type': 'application/json'
+                },
+                body: JSON.stringify({
+                        sessionId,
+                        runId: 'pre-fix',
+                        hypothesisId,
+                        location,
+                        msg,
+                        data,
+                        ts: Date.now()
+                })
+        }).catch(() => undefined);
+}
+
 export async function getPublishedArticles({
 	database = getDatabaseClient(),
 	limit = 12,
@@ -271,6 +309,23 @@ export async function createDraftArticle(
 	{ database = getDatabaseClient() }: QueryOptions = {}
 ): Promise<Article> {
 	const sanitized = sanitizeArticleDraftInput(input);
+        // #region debug-point C:draft-insert-shape
+        void reportDebugEvent(
+                'C',
+                'src/lib/server/queries.ts:createDraftArticle',
+                '[DEBUG] Draft insert parameter shape',
+                {
+                        slug: sanitized.slug,
+                        hasQualityNotes: sanitized.quality_notes != null,
+                        hasImageStrategy: sanitized.image_strategy != null,
+                        hasGlossaryNotes: (sanitized.glossary_notes?.length ?? 0) > 0,
+                        hasScoutPayload: sanitized.scout_payload != null,
+                        hasSentinelPayload: sanitized.sentinel_payload != null,
+                        hasLensPayload: sanitized.lens_payload != null,
+                        hasPolyglotPayload: sanitized.polyglot_payload != null
+                }
+        );
+        // #endregion
 	const rows = await database.query(
 		`
 			INSERT INTO articles (
@@ -321,7 +376,7 @@ export async function createDraftArticle(
 			) VALUES (
                                 $1, 'pending', $2, $3, $4, $5, $6, $7, $8, $9, $10,
                                 $11, $12, $13, $14, $15, $16::jsonb, $17::jsonb, $18::jsonb, $19, $20, $21,
-                                $22::jsonb, $23::jsonb, $24::jsonb, $25::jsonb, $26::jsonb, $27::jsonb, $28, $29, $30, $31, $32,
+                                $22::jsonb, $23::jsonb, $24::jsonb, $25::jsonb, $26::jsonb, $27, $28, $29, $30, $31, $32,
                                 $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43
 			)
                         ON CONFLICT (slug) DO UPDATE
