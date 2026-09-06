@@ -238,6 +238,9 @@ describe('query helpers', () => {
                 expect(sql).toContain('summary');
                 expect(sql).toContain('summary = EXCLUDED.summary');
                 expect(sql).toContain('image_notes_for_human = EXCLUDED.image_notes_for_human');
+                expect(sql).toContain(
+                        '$22::jsonb, $23::jsonb, $24::jsonb, $25::jsonb, $26::jsonb, $27::jsonb'
+                );
                 expect(params).toEqual(
                         expect.arrayContaining([
                                 'Short summary',

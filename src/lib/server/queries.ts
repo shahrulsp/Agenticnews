@@ -321,7 +321,7 @@ export async function createDraftArticle(
 			) VALUES (
                                 $1, 'pending', $2, $3, $4, $5, $6, $7, $8, $9, $10,
                                 $11, $12, $13, $14, $15, $16::jsonb, $17::jsonb, $18::jsonb, $19, $20, $21,
-                                $22, $23::jsonb, $24::jsonb, $25::jsonb, $26::jsonb, $27::jsonb, $28, $29, $30, $31, $32,
+                                $22::jsonb, $23::jsonb, $24::jsonb, $25::jsonb, $26::jsonb, $27::jsonb, $28, $29, $30, $31, $32,
                                 $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43
 			)
                         ON CONFLICT (slug) DO UPDATE
